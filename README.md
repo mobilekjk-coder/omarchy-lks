@@ -9,7 +9,7 @@ Plugin id: `kjk.lks`
 Needs [Omarchy](https://omarchy.org/) with a running `omarchy-shell`, plus `python3` on `PATH` (already present on a normal Omarchy install).
 
 ```bash
-omarchy plugin add https://github.com/REPLACE_ME/omarchy-lks.git --enable
+omarchy plugin add https://github.com/mobilekjk-coder/omarchy-lks.git --enable
 ```
 
 That clones the plugin into `~/.config/omarchy/plugins/kjk.lks/` and puts the widget on the center of the bar. Move it if you want:
