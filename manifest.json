@@ -1,0 +1,51 @@
+{
+  "schemaVersion": 1,
+  "id": "kjk.lks",
+  "name": "ŁKS",
+  "version": "0.1.0",
+  "author": "Krzysztof Janusz Kowalczykowski",
+  "license": "MIT",
+  "description": "ŁKS Łódź match calendar. Starts with the men's first football team; sources are swappable per section.",
+  "kinds": [
+    "bar-widget"
+  ],
+  "entryPoints": {
+    "barWidget": "BarWidget.qml"
+  },
+  "barWidget": {
+    "displayName": "ŁKS",
+    "description": "Next ŁKS match, recent result, and league table",
+    "category": "Info",
+    "allowMultiple": false,
+    "defaultSection": "center",
+    "defaults": {
+      "source": "auto",
+      "section": "football-men",
+      "refreshMinutes": 15,
+      "includeFriendlies": false
+    },
+    "schema": [
+      {
+        "key": "source",
+        "type": "string",
+        "label": "Source (auto, lkslodz, thesportsdb)",
+        "defaultValue": "auto"
+      },
+      {
+        "key": "section",
+        "type": "string",
+        "label": "Section",
+        "defaultValue": "football-men"
+      },
+      {
+        "key": "refreshMinutes",
+        "type": "integer",
+        "label": "Refresh interval (minutes)",
+        "min": 5,
+        "max": 120,
+        "step": 5,
+        "defaultValue": 15
+      }
+    ]
+  }
+}
