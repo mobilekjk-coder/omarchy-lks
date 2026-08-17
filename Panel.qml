@@ -34,8 +34,9 @@ Panel {
   readonly property string lang: Model.resolveLang(languagePref, Qt.locale().name)
 
   readonly property var nextEvent: Model.pickNext(snapshot.events, nowMs, includeFriendlies)
+  readonly property var nextCup: Model.pickNextCup(snapshot.events, nowMs)
   readonly property var lastEvent: Model.pickLast(snapshot.events, nowMs, includeFriendlies)
-  readonly property var upcoming: Model.upcomingEvents(snapshot.events, nowMs, includeFriendlies, 5)
+  readonly property var upcoming: Model.upcomingEvents(snapshot.events, nowMs, includeFriendlies, 6)
   readonly property var laterEvents: upcoming.slice(1)
   readonly property var tableRows: Model.tableWindow(snapshot.table, 2)
   readonly property var usRow: Model.ourStanding(snapshot.table)
@@ -113,7 +114,7 @@ Panel {
   }
 
   function refresh() {
-    if (fetchProc.running) return
+    if (fetchProc.running) fetchProc.running = false
     root.loading = true
     fetchProc.command = ["python3", root.pluginDir + "/fetch.py", "--section", root.sectionId, "--source", root.sourcePref]
     fetchProc.running = true
@@ -241,6 +242,59 @@ Panel {
 
           Item {
             width: parent.width
+            height: languageRow.height
+
+          Row {
+            id: languageRow
+            anchors.right: parent.right
+            anchors.rightMargin: Style.space(20)
+            spacing: Style.space(8)
+
+            Text {
+              text: "PL"
+              color: root.lang === "pl" ? root.contentForeground : Qt.darker(root.contentForeground, 1.6)
+              font.family: root.contentFontFamily
+              font.pixelSize: Style.font.bodySmall
+              font.bold: root.lang === "pl"
+              font.letterSpacing: 1
+
+              MouseArea {
+                anchors.fill: parent
+                anchors.margins: -Style.space(6)
+                hoverEnabled: true
+                cursorShape: Qt.PointingHandCursor
+                onClicked: root.persistLanguage("pl")
+              }
+            }
+
+            Text {
+              text: "·"
+              color: Qt.darker(root.contentForeground, 1.6)
+              font.family: root.contentFontFamily
+              font.pixelSize: Style.font.bodySmall
+            }
+
+            Text {
+              text: "EN"
+              color: root.lang === "en" ? root.contentForeground : Qt.darker(root.contentForeground, 1.6)
+              font.family: root.contentFontFamily
+              font.pixelSize: Style.font.bodySmall
+              font.bold: root.lang === "en"
+              font.letterSpacing: 1
+
+              MouseArea {
+                anchors.fill: parent
+                anchors.margins: -Style.space(6)
+                hoverEnabled: true
+                cursorShape: Qt.PointingHandCursor
+                onClicked: root.persistLanguage("en")
+              }
+            }
+          }
+          }
+
+          Item {
+            width: parent.width
             height: Math.max(heroLeft.height, heroRight.height)
 
             Column {
@@ -313,6 +367,52 @@ Panel {
           }
 
           Rectangle {
+            visible: !!root.nextCup
+            width: parent.width
+            height: Style.spacing.hairline
+            color: root.contentForeground
+            opacity: 0.12
+          }
+
+          Column {
+            visible: !!root.nextCup
+            width: parent.width
+            spacing: Style.space(4)
+            leftPadding: Style.space(16)
+            rightPadding: Style.space(16)
+
+            PanelSectionHeader {
+              text: Model.t(root.lang, "cup")
+              foreground: root.contentForeground
+              fontFamily: root.contentFontFamily
+            }
+
+            Text {
+              text: root.nextCup ? ((root.nextCup.isHome ? "" : "@ ") + root.nextCup.opponent) : ""
+              color: root.contentForeground
+              font.family: root.contentFontFamily
+              font.pixelSize: Style.font.title
+              font.bold: true
+              width: parent.width - Style.space(32)
+              wrapMode: Text.WordWrap
+            }
+
+            Text {
+              text: root.nextCup ? Model.formatWhenLong(root.nextCup.kickoffMs, root.lang) : ""
+              color: root.contentForeground
+              font.family: root.contentFontFamily
+              font.pixelSize: Style.font.body
+            }
+
+            Text {
+              text: root.nextCup ? Model.competitionLine(root.nextCup, root.lang) : ""
+              color: Qt.darker(root.contentForeground, 1.4)
+              font.family: root.contentFontFamily
+              font.pixelSize: Style.font.bodySmall
+            }
+          }
+
+          Rectangle {
             visible: !!root.lastEvent
             width: parent.width
             height: Style.spacing.hairline
@@ -368,7 +468,7 @@ Panel {
           Column {
             visible: root.laterEvents.length > 0
             width: parent.width
-            spacing: Style.space(2)
+            spacing: Style.space(4)
             leftPadding: Style.space(16)
             rightPadding: Style.space(16)
 
@@ -381,38 +481,14 @@ Panel {
             Repeater {
               model: root.laterEvents
 
-              Row {
+              Text {
                 required property var modelData
                 width: bodyColumn.width - Style.space(32)
-                spacing: Style.space(10)
-                height: Style.space(28)
-
-                Text {
-                  width: Style.space(72)
-                  text: Model.formatWhen(modelData.kickoffMs, root.nowMs, root.lang)
-                  color: Qt.darker(root.contentForeground, 1.4)
-                  font.family: root.contentFontFamily
-                  font.pixelSize: Style.font.bodySmall
-                  anchors.verticalCenter: parent.verticalCenter
-                }
-
-                Text {
-                  width: parent.width - Style.space(110)
-                  text: (modelData.isHome ? "" : "@ ") + modelData.opponent
-                  color: root.contentForeground
-                  font.family: root.contentFontFamily
-                  font.pixelSize: Style.font.body
-                  elide: Text.ElideRight
-                  anchors.verticalCenter: parent.verticalCenter
-                }
-
-                Text {
-                  text: Model.venueMark(modelData, root.lang)
-                  color: Qt.darker(root.contentForeground, 1.5)
-                  font.family: root.contentFontFamily
-                  font.pixelSize: Style.font.caption
-                  anchors.verticalCenter: parent.verticalCenter
-                }
+                text: Model.upcomingLine(modelData)
+                color: root.contentForeground
+                font.family: root.contentFontFamily
+                font.pixelSize: Style.font.bodySmall
+                elide: Text.ElideRight
               }
             }
           }
@@ -515,24 +591,6 @@ Panel {
             font.family: root.contentFontFamily
             font.pixelSize: Style.font.caption
             leftPadding: Style.space(16)
-          }
-
-          Text {
-            text: Model.t(root.lang, "languageName")
-            color: Qt.darker(root.contentForeground, 1.4)
-            font.family: root.contentFontFamily
-            font.pixelSize: Style.font.caption
-            leftPadding: Style.space(16)
-            font.underline: languageTap.containsMouse
-
-            HoverHandler {
-              id: languageTap
-              cursorShape: Qt.PointingHandCursor
-            }
-
-            TapHandler {
-              onTapped: root.cycleLanguage()
-            }
           }
         }
       }

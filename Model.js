@@ -23,6 +23,7 @@ var STRINGS = {
     "noFixture": "Brak terminu",
     "lastResult": "OSTATNI WYNIK",
     "upcoming": "NADCHODZĄCE",
+    "cup": "PUCHAR",
     "table": "TABELA",
     "home": "u siebie",
     "away": "wyjazd",
@@ -51,6 +52,7 @@ var STRINGS = {
     "noFixture": "No fixture",
     "lastResult": "LAST RESULT",
     "upcoming": "UPCOMING",
+    "cup": "CUP",
     "table": "TABLE",
     "home": "home",
     "away": "away",
@@ -187,6 +189,14 @@ function compactName(value) {
 function isLksName(value) {
   var compact = compactName(value)
   return compact === "lks" || compact === "lkslodz" || compact.indexOf("lkslodz") === 0
+}
+
+function isReserveName(value) {
+  return /(^| )(ii|2|rezerwy|rezerwa)( |$)/.test(foldName(value))
+}
+
+function isLksFirstTeam(value) {
+  return isLksName(value) && !isReserveName(value)
 }
 
 function logoSlug(url) {
@@ -425,10 +435,30 @@ function parseLkslodzTable(raw) {
   return table
 }
 
+function collectSportsDbRows(payloads) {
+  var rows = []
+  if (!payloads) return rows
+  if (payloads.next && payloads.next.events) rows = rows.concat(payloads.next.events)
+  if (payloads.last && payloads.last.results) rows = rows.concat(payloads.last.results)
+  if (payloads.last && payloads.last.events) rows = rows.concat(payloads.last.events)
+  var cup = payloads.cup
+  if (cup && typeof cup === "object") {
+    for (var key in cup) {
+      var block = cup[key]
+      if (block && block.event) rows = rows.concat(block.event)
+      if (block && block.events) rows = rows.concat(block.events)
+    }
+  }
+  return rows
+}
+
 function parseSportsDbEvent(row, sourceKey, nowMs) {
   if (!row) return null
   var home = row.strHomeTeam || ""
   var away = row.strAwayTeam || ""
+  var homeIsUs = String(row.idHomeTeam) === "137112" || isLksFirstTeam(home)
+  var awayIsUs = String(row.idAwayTeam) === "137112" || isLksFirstTeam(away)
+  if (!homeIsUs && !awayIsUs) return null
   var homeScore = parseScore(row.intHomeScore)
   var awayScore = parseScore(row.intAwayScore)
   var kickoffMs = parseUtcTimestamp(row.strTimestamp)
@@ -442,28 +472,22 @@ function parseSportsDbEvent(row, sourceKey, nowMs) {
     competition: row.strLeague || "",
     round: String(row.intRound || ""),
     kickoffMs: kickoffMs,
-    home: isLksName(home) ? TEAM : home,
-    away: isLksName(away) ? TEAM : away,
+    home: homeIsUs ? TEAM : home,
+    away: awayIsUs ? TEAM : away,
     homeScore: homeScore,
     awayScore: awayScore,
     status: normalizeStatus(row.strStatus, homeScore, awayScore, kickoffMs, nowMs),
     venue: row.strVenue || "",
-    isHome: String(row.idHomeTeam) === "137112" || isLksName(home)
+    isHome: homeIsUs
   })
 }
 
 function parseSportsDbEvents(payloads, nowMs) {
+  var rows = collectSportsDbRows(payloads)
   var events = []
-  var next = payloads && payloads.next && payloads.next.events ? payloads.next.events : []
-  var last = payloads && payloads.last && payloads.last.results ? payloads.last.results : []
-  var i
-  for (i = 0; i < next.length; i++) {
-    var upcoming = parseSportsDbEvent(next[i], "next" + i, nowMs)
-    if (upcoming) events.push(upcoming)
-  }
-  for (i = 0; i < last.length; i++) {
-    var previous = parseSportsDbEvent(last[i], "last" + i, nowMs)
-    if (previous) events.push(previous)
+  for (var i = 0; i < rows.length; i++) {
+    var event = parseSportsDbEvent(rows[i], "tsdb" + i, nowMs)
+    if (event) events.push(event)
   }
   return dedupeEvents(events)
 }
@@ -491,6 +515,91 @@ function parseSportsDbTable(raw) {
   return table
 }
 
+// Official kickoffs when a feed is stale. TheSportsDB still has the Tychy
+// cup tie as 2 Sep 16:00 UTC; the host club and city published 3 Sep 17:30
+// CEST at Stadion Miejski w Tychach.
+var KICKOFF_CORRECTIONS = [
+  {
+    opponent: "gks tychy",
+    competitionKind: "cup",
+    notBefore: "2026-08-01",
+    kickoff: "2026-09-03 17:30:00",
+    venue: "Stadion Miejski w Tychach"
+  }
+]
+
+function teamsLooselyMatch(a, b) {
+  var fa = foldName(a)
+  var fb = foldName(b)
+  if (!fa || !fb) return false
+  if (fa === fb) return true
+  if (fa.indexOf(fb) === 0 || fb.indexOf(fa) === 0) return true
+  return false
+}
+
+function parseLigaFixtures(raw) {
+  var list = raw && raw.fixtures ? raw.fixtures : raw
+  if (!Array.isArray(list)) return []
+  var out = []
+  for (var i = 0; i < list.length; i++) {
+    var row = list[i] || {}
+    var homeIsUs = isLksFirstTeam(row.home)
+    var awayIsUs = isLksFirstTeam(row.away)
+    if (!homeIsUs && !awayIsUs) continue
+    out.push({
+      home: homeIsUs ? TEAM : row.home,
+      away: awayIsUs ? TEAM : row.away,
+      opponent: homeIsUs ? row.away : row.home,
+      isHome: homeIsUs,
+      round: String(row.round || ""),
+      kickoffMs: parseLocalDateTime(row.kickoff),
+      status: row.status || "scheduled"
+    })
+  }
+  return out
+}
+
+function applyLeagueSchedule(events, fixtures) {
+  var list = events || []
+  var liga = fixtures || []
+  if (!liga.length) return list
+  for (var i = 0; i < list.length; i++) {
+    var event = list[i]
+    if (!event || event.competitionKind !== "league") continue
+    var hit = null
+    for (var j = 0; j < liga.length; j++) {
+      var row = liga[j]
+      if (event.isHome !== row.isHome) continue
+      if (!teamsLooselyMatch(event.opponent, row.opponent)) continue
+      if (event.round && row.round && String(event.round) === String(row.round)) {
+        hit = row
+        break
+      }
+      if (!hit) hit = row
+    }
+    if (hit && hit.kickoffMs) event.kickoffMs = hit.kickoffMs
+  }
+  return list
+}
+
+function applyKickoffCorrections(events) {
+  var list = events || []
+  for (var i = 0; i < list.length; i++) {
+    var event = list[i]
+    if (!event || event.status === "finished") continue
+    for (var j = 0; j < KICKOFF_CORRECTIONS.length; j++) {
+      var fix = KICKOFF_CORRECTIONS[j]
+      if (fix.competitionKind && event.competitionKind !== fix.competitionKind) continue
+      if (foldName(event.opponent) !== fix.opponent) continue
+      if (fix.notBefore && event.kickoffMs && event.kickoffMs < parseLocalDateTime(fix.notBefore + " 00:00:00")) continue
+      var nextKickoff = parseLocalDateTime(fix.kickoff)
+      if (nextKickoff !== null) event.kickoffMs = nextKickoff
+      if (fix.venue) event.venue = fix.venue
+    }
+  }
+  return list
+}
+
 function parseBundle(bundle, nowMs) {
   var snapshot = emptySnapshot()
   if (!bundle || typeof bundle !== "object") {
@@ -509,10 +618,16 @@ function parseBundle(bundle, nowMs) {
   if (snapshot.source === "thesportsdb") {
     snapshot.events = parseSportsDbEvents(payloads, nowMs)
     snapshot.table = parseSportsDbTable(payloads.table)
+  } else if (snapshot.source === "merged") {
+    snapshot.events = dedupeEvents(parseLkslodzMatches(payloads.matches, nowMs).concat(parseSportsDbEvents(payloads, nowMs)))
+    snapshot.table = parseLkslodzTable(payloads.table)
+    if (!snapshot.table.length) snapshot.table = parseSportsDbTable(payloads.table)
   } else {
     snapshot.events = parseLkslodzMatches(payloads.matches, nowMs)
     snapshot.table = parseLkslodzTable(payloads.table)
   }
+  snapshot.events = applyLeagueSchedule(snapshot.events, parseLigaFixtures(payloads.liga))
+  snapshot.events = applyKickoffCorrections(snapshot.events)
   snapshot.ok = snapshot.events.length > 0 || snapshot.table.length > 0
   if (!snapshot.ok) snapshot.error = bundle.error || "no events"
   return snapshot
@@ -523,6 +638,7 @@ function parseCache(raw, nowMs) {
     var data = JSON.parse(String(raw || ""))
     if (!data || typeof data !== "object") return emptySnapshot()
     if (data.events || data.table) {
+      data.events = applyKickoffCorrections(data.events || [])
       data.ok = !!(data.events && data.events.length) || !!(data.table && data.table.length)
       return data
     }
@@ -545,6 +661,25 @@ function pickNext(events, nowMs, includeFriendlies) {
   for (var i = 0; i < list.length; i++) {
     var event = list[i]
     if (!includeEvent(event, includeFriendlies)) continue
+    if (event.status === "cancelled" || event.status === "postponed") continue
+    if (event.status === "live") {
+      if (!live || event.kickoffMs < live.kickoffMs) live = event
+      continue
+    }
+    if (event.status === "scheduled" && event.kickoffMs >= startOfDay(nowMs)) {
+      if (!next || event.kickoffMs < next.kickoffMs) next = event
+    }
+  }
+  return live || next
+}
+
+function pickNextCup(events, nowMs) {
+  var list = events || []
+  var live = null
+  var next = null
+  for (var i = 0; i < list.length; i++) {
+    var event = list[i]
+    if (!event || event.competitionKind !== "cup") continue
     if (event.status === "cancelled" || event.status === "postponed") continue
     if (event.status === "live") {
       if (!live || event.kickoffMs < live.kickoffMs) live = event
@@ -634,7 +769,7 @@ function formatWhen(ms, nowMs, lang) {
   if (!ms) return ""
   var strings = pack(lang)
   if (isSameDay(ms, nowMs)) return t(lang, "today") + " " + formatClock(ms)
-  if (isSameDay(ms, addDays(startOfDay(nowMs), 1))) return t(lang, "tomorrow") + " " + formatClock(ms)
+  if (isSameDay(ms, nowMs + 24 * 60 * 60 * 1000)) return t(lang, "tomorrow") + " " + formatClock(ms)
   if (ms - nowMs < 7 * 24 * 60 * 60 * 1000 && ms >= startOfDay(nowMs))
     return strings.weekdaysShort[new Date(ms).getDay()] + " " + formatClock(ms)
   return formatDayMonth(ms)
@@ -685,14 +820,49 @@ function venueMark(event, lang) {
   return event.isHome ? t(lang, "homeMark") : t(lang, "awayMark")
 }
 
+function displayCompetition(name, lang) {
+  var folded = foldName(name)
+  if (/puchar|polish cup/.test(folded)) return lang === "en" ? "Polish Cup" : "Puchar Polski"
+  return name || ""
+}
+
+function upcomingCompetition(event, lang) {
+  if (!event) return ""
+  if (event.competitionKind === "cup") return "PP"
+  return "1L"
+}
+
+function upcomingLine(event) {
+  if (!event) return ""
+  var d = new Date(event.kickoffMs)
+  var when = pad2(d.getDate()) + "." + pad2(d.getMonth() + 1) + " " + pad2(d.getHours()) + ":" + pad2(d.getMinutes())
+  var comp = upcomingCompetition(event)
+  var venue = event.isHome ? "D" : "W"
+  return when + "   " + comp + "  " + venue + "  " + event.opponent
+}
+
+function displayRound(event, lang) {
+  if (!event || !event.round) return ""
+  if (event.competitionKind === "cup") {
+    var n = parseInt(event.round, 10)
+    if (n === 64) return lang === "pl" ? "1. runda" : "1st round"
+    if (n === 32) return lang === "pl" ? "1/16 finału" : "round of 32"
+    if (n === 16) return lang === "pl" ? "1/8 finału" : "round of 16"
+    if (n === 8) return lang === "pl" ? "ćwierćfinał" : "quarter-final"
+    if (n === 4) return lang === "pl" ? "półfinał" : "semi-final"
+    if (n === 2) return lang === "pl" ? "finał" : "final"
+    return t(lang, "round") + " " + event.round
+  }
+  return t(lang, "matchday") + " " + event.round
+}
+
 function competitionLine(event, lang) {
   if (!event) return ""
   var bits = []
-  if (event.competition) bits.push(event.competition)
-  if (event.round) {
-    var roundKey = event.competitionKind === "cup" ? "round" : "matchday"
-    bits.push(t(lang, roundKey) + " " + event.round)
-  }
+  var competition = displayCompetition(event.competition, lang)
+  if (competition) bits.push(competition)
+  var round = displayRound(event, lang)
+  if (round) bits.push(round)
   bits.push(venueLine(event, lang))
   return bits.join(" · ")
 }
@@ -748,6 +918,7 @@ if (typeof module !== "undefined") {
     emptySnapshot: emptySnapshot,
     foldName: foldName,
     isLksName: isLksName,
+    isLksFirstTeam: isLksFirstTeam,
     sideName: sideName,
     shortName: shortName,
     parseScore: parseScore,
@@ -762,6 +933,7 @@ if (typeof module !== "undefined") {
     parseBundle: parseBundle,
     parseCache: parseCache,
     pickNext: pickNext,
+    pickNextCup: pickNextCup,
     pickLast: pickLast,
     upcomingEvents: upcomingEvents,
     ourStanding: ourStanding,
@@ -776,6 +948,8 @@ if (typeof module !== "undefined") {
     barLabel: barLabel,
     barLabelVertical: barLabelVertical,
     venueMark: venueMark,
+    upcomingCompetition: upcomingCompetition,
+    upcomingLine: upcomingLine,
     competitionLine: competitionLine,
     ordinal: ordinal,
     standingLine: standingLine,

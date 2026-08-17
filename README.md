@@ -53,7 +53,11 @@ omarchy bar set kjk.lks refreshMinutes 10
 
 The panel, bar label, and notifications follow that language. `auto` uses Polish when the desktop locale is Polish, otherwise English. You can also tap the language name at the bottom of the panel to switch between Polski and English.
 
-`auto` asks the official club API first and falls back to TheSportsDB if that fails.
+`auto` merges three public sources:
+
+- [lkslodz.pl](https://lkslodz.pl/) for the club match list and table
+- [1liga.org](https://www.1liga.org/lks) for confirmed Betclic 1 Liga dates and kickoff times (TV can move a round from Saturday 17:00 to Friday–Monday)
+- [TheSportsDB](https://www.thesportsdb.com/) for cup ties the club API still omits
 
 ## Data sources
 
