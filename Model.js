@@ -15,7 +15,89 @@ var TEAM = "ŁKS Łódź"
 var TEAM_SHORT = "ŁKS"
 var SECTION_FOOTBALL_MEN = "football-men"
 
-var WEEKDAYS_PL = ["nd.", "pn.", "wt.", "śr.", "cz.", "pt.", "sb."]
+var STRINGS = {
+  pl: {
+    "nextMatch": "NASTĘPNY MECZ",
+    "live": "NA ŻYWO",
+    "liveShort": "na żywo",
+    "noFixture": "Brak terminu",
+    "lastResult": "OSTATNI WYNIK",
+    "upcoming": "NADCHODZĄCE",
+    "table": "TABELA",
+    "home": "u siebie",
+    "away": "wyjazd",
+    "homeMark": "D",
+    "awayMark": "W",
+    "matchday": "kolejka",
+    "round": "runda",
+    "place": "miejsce",
+    "pts": "pkt",
+    "today": "dziś",
+    "tomorrow": "jutro",
+    "source": "Źródło",
+    "loading": "Pobieranie terminów…",
+    "noMatch": "Brak zaplanowanego meczu",
+    "languageName": "Polski",
+    "error.empty": "Pusta odpowiedź",
+    "error.parse": "Nie udało się odczytać danych",
+    "error.fetch": "Nie udało się pobrać danych",
+    weekdaysShort: ["nd.", "pn.", "wt.", "śr.", "cz.", "pt.", "sb."],
+    weekdaysLong: ["niedziela", "poniedziałek", "wtorek", "środa", "czwartek", "piątek", "sobota"]
+  },
+  en: {
+    "nextMatch": "NEXT MATCH",
+    "live": "LIVE",
+    "liveShort": "live",
+    "noFixture": "No fixture",
+    "lastResult": "LAST RESULT",
+    "upcoming": "UPCOMING",
+    "table": "TABLE",
+    "home": "home",
+    "away": "away",
+    "homeMark": "H",
+    "awayMark": "A",
+    "matchday": "matchday",
+    "round": "round",
+    "place": "place",
+    "pts": "pts",
+    "today": "today",
+    "tomorrow": "tomorrow",
+    "source": "Source",
+    "loading": "Loading fixtures…",
+    "noMatch": "No upcoming match",
+    "languageName": "English",
+    "error.empty": "Empty response",
+    "error.parse": "Could not parse data",
+    "error.fetch": "Could not fetch data",
+    weekdaysShort: ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"],
+    weekdaysLong: ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"]
+  }
+}
+
+function resolveLang(pref, localeName) {
+  var chosen = String(pref || "auto").toLowerCase().replace(/^\s+|\s+$/g, "")
+  if (chosen.indexOf("pl") === 0) return "pl"
+  if (chosen.indexOf("en") === 0) return "en"
+  var locale = String(localeName || "").toLowerCase()
+  if (locale.indexOf("pl") === 0) return "pl"
+  if (locale.indexOf("en") === 0) return "en"
+  return "pl"
+}
+
+function pack(lang) {
+  return STRINGS[lang] || STRINGS.pl
+}
+
+function t(lang, key) {
+  var strings = pack(lang)
+  if (strings[key] !== undefined) return strings[key]
+  if (STRINGS.en[key] !== undefined) return STRINGS.en[key]
+  return key
+}
+
+function otherLang(lang) {
+  return lang === "en" ? "pl" : "en"
+}
 
 var SHORT_NAMES = {
   "bruk-bet termalica nieciecza": "Nieciecza",
@@ -548,20 +630,20 @@ function isSameDay(a, b) {
   return da.getFullYear() === db.getFullYear() && da.getMonth() === db.getMonth() && da.getDate() === db.getDate()
 }
 
-function formatWhen(ms, nowMs) {
+function formatWhen(ms, nowMs, lang) {
   if (!ms) return ""
-  if (isSameDay(ms, nowMs)) return "dziś " + formatClock(ms)
-  if (isSameDay(ms, addDays(startOfDay(nowMs), 1))) return "jutro " + formatClock(ms)
+  var strings = pack(lang)
+  if (isSameDay(ms, nowMs)) return t(lang, "today") + " " + formatClock(ms)
+  if (isSameDay(ms, addDays(startOfDay(nowMs), 1))) return t(lang, "tomorrow") + " " + formatClock(ms)
   if (ms - nowMs < 7 * 24 * 60 * 60 * 1000 && ms >= startOfDay(nowMs))
-    return WEEKDAYS_PL[new Date(ms).getDay()] + " " + formatClock(ms)
+    return strings.weekdaysShort[new Date(ms).getDay()] + " " + formatClock(ms)
   return formatDayMonth(ms)
 }
 
-function formatWhenLong(ms) {
+function formatWhenLong(ms, lang) {
   if (!ms) return ""
   var d = new Date(ms)
-  var days = ["niedziela", "poniedziałek", "wtorek", "środa", "czwartek", "piątek", "sobota"]
-  return days[d.getDay()] + " " + formatDayMonth(ms) + " · " + formatClock(ms)
+  return pack(lang).weekdaysLong[d.getDay()] + " " + formatDayMonth(ms) + " · " + formatClock(ms)
 }
 
 function scoreline(event) {
@@ -578,11 +660,11 @@ function resultForUs(event) {
   return "R"
 }
 
-function barLabel(snapshot, nowMs, includeFriendlies) {
+function barLabel(snapshot, nowMs, includeFriendlies, lang) {
   var next = pickNext(snapshot && snapshot.events, nowMs, includeFriendlies)
   if (!next) return TEAM_SHORT
   if (next.status === "live") return scoreline(next) + " " + shortName(next.opponent)
-  return "vs " + shortName(next.opponent) + " · " + formatWhen(next.kickoffMs, nowMs)
+  return "vs " + shortName(next.opponent) + " · " + formatWhen(next.kickoffMs, nowMs, lang)
 }
 
 function barLabelVertical(snapshot, nowMs, includeFriendlies) {
@@ -593,25 +675,51 @@ function barLabelVertical(snapshot, nowMs, includeFriendlies) {
   return TEAM_SHORT + "\n" + formatDayMonth(next.kickoffMs)
 }
 
-function venueLine(event) {
+function venueLine(event, lang) {
   if (!event) return ""
-  if (event.isHome) return "u siebie"
-  return "wyjazd"
+  return event.isHome ? t(lang, "home") : t(lang, "away")
 }
 
-function competitionLine(event) {
+function venueMark(event, lang) {
+  if (!event) return ""
+  return event.isHome ? t(lang, "homeMark") : t(lang, "awayMark")
+}
+
+function competitionLine(event, lang) {
   if (!event) return ""
   var bits = []
   if (event.competition) bits.push(event.competition)
-  if (event.round) bits.push("kolejka " + event.round)
-  bits.push(venueLine(event))
+  if (event.round) {
+    var roundKey = event.competitionKind === "cup" ? "round" : "matchday"
+    bits.push(t(lang, roundKey) + " " + event.round)
+  }
+  bits.push(venueLine(event, lang))
   return bits.join(" · ")
 }
 
-function standingLine(table) {
+function ordinal(n, lang) {
+  var num = parseInt(n, 10) || 0
+  if (lang !== "en") return num + "."
+  var v = num % 100
+  if (v >= 11 && v <= 13) return num + "th"
+  switch (num % 10) {
+    case 1: return num + "st"
+    case 2: return num + "nd"
+    case 3: return num + "rd"
+    default: return num + "th"
+  }
+}
+
+function standingLine(table, lang) {
   var row = ourStanding(table)
   if (!row) return ""
-  return row.position + ". miejsce · " + row.points + " pkt"
+  return ordinal(row.position, lang) + " " + t(lang, "place") + " · " + row.points + " " + t(lang, "pts")
+}
+
+function pointsLine(table, lang) {
+  var row = ourStanding(table)
+  if (!row) return ""
+  return row.points + " " + t(lang, "pts")
 }
 
 function notifySummary(event) {
@@ -621,17 +729,17 @@ function notifySummary(event) {
   return TEAM_SHORT + " vs " + event.opponent
 }
 
-function notifyBody(event, table) {
-  if (!event) return "Brak zaplanowanego meczu"
-  var bits = [formatWhenLong(event.kickoffMs), competitionLine(event)]
-  var tableText = standingLine(table)
+function notifyBody(event, table, lang) {
+  if (!event) return t(lang, "noMatch")
+  var bits = [formatWhenLong(event.kickoffMs, lang), competitionLine(event, lang)]
+  var tableText = standingLine(table, lang)
   if (tableText) bits.push(tableText)
   return bits.join("\n")
 }
 
-function sourceCaption(snapshot) {
+function sourceCaption(snapshot, lang) {
   if (!snapshot || !snapshot.sourceLabel) return ""
-  return "Źródło: " + snapshot.sourceLabel
+  return t(lang, "source") + ": " + snapshot.sourceLabel
 }
 
 if (typeof module !== "undefined") {
@@ -658,14 +766,20 @@ if (typeof module !== "undefined") {
     upcomingEvents: upcomingEvents,
     ourStanding: ourStanding,
     tableWindow: tableWindow,
+    resolveLang: resolveLang,
+    t: t,
+    otherLang: otherLang,
     formatWhen: formatWhen,
     formatWhenLong: formatWhenLong,
     scoreline: scoreline,
     resultForUs: resultForUs,
     barLabel: barLabel,
     barLabelVertical: barLabelVertical,
+    venueMark: venueMark,
     competitionLine: competitionLine,
+    ordinal: ordinal,
     standingLine: standingLine,
+    pointsLine: pointsLine,
     notifySummary: notifySummary,
     notifyBody: notifyBody,
     sourceCaption: sourceCaption

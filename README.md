@@ -41,13 +41,17 @@ Set these on the bar entry (Setup, or `omarchy bar set`):
 | Key | Default | Meaning |
 |---|---|---|
 | `source` | `auto` | `auto`, `lkslodz`, or `thesportsdb` |
+| `language` | `auto` | `auto` (desktop locale), `pl`, or `en` |
 | `section` | `football-men` | Only men's first football is implemented so far |
 | `refreshMinutes` | `15` | How often to refetch |
 
 ```bash
 omarchy bar set kjk.lks source thesportsdb
+omarchy bar set kjk.lks language pl
 omarchy bar set kjk.lks refreshMinutes 10
 ```
+
+The panel, bar label, and notifications follow that language. `auto` uses Polish when the desktop locale is Polish, otherwise English. You can also tap the language name at the bottom of the panel to switch between Polski and English.
 
 `auto` asks the official club API first and falls back to TheSportsDB if that fails.
 

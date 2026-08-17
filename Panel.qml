@@ -27,9 +27,11 @@ Panel {
   readonly property string cachePath: Quickshell.env("HOME") + "/.local/state/omarchy/kjk.lks/cache.json"
   readonly property string sourcePref: String(setting("source", "auto") || "auto")
   readonly property string sectionId: String(setting("section", "football-men") || "football-men")
+  readonly property string languagePref: String(setting("language", "auto") || "auto")
   readonly property bool includeFriendlies: setting("includeFriendlies", false) === true
   readonly property int refreshMinutes: Math.max(5, parseInt(setting("refreshMinutes", 15), 10) || 15)
   readonly property var nowMs: clock.date.getTime()
+  readonly property string lang: Model.resolveLang(languagePref, Qt.locale().name)
 
   readonly property var nextEvent: Model.pickNext(snapshot.events, nowMs, includeFriendlies)
   readonly property var lastEvent: Model.pickLast(snapshot.events, nowMs, includeFriendlies)
@@ -40,7 +42,7 @@ Panel {
 
   readonly property string label: root.vertical
     ? Model.barLabelVertical(snapshot, nowMs, includeFriendlies)
-    : Model.barLabel(snapshot, nowMs, includeFriendlies)
+    : Model.barLabel(snapshot, nowMs, includeFriendlies, lang)
 
   readonly property color contentForeground: bar ? bar.foreground : Color.foreground
   readonly property string contentFontFamily: bar ? bar.fontFamily : Style.font.family
@@ -91,9 +93,23 @@ Panel {
       root.fetchError = ""
       cacheFile.setText(JSON.stringify(parsed) + "\n")
     } else {
-      root.fetchError = parsed.error || "fetch failed"
+      root.fetchError = "fetch"
       if (!root.snapshot.ok) root.snapshot = parsed
     }
+  }
+
+  function persistLanguage(next) {
+    var entry = { id: root.moduleName }
+    for (var key in root.settings) if (key !== "id") entry[key] = root.settings[key]
+    entry.language = next
+    root.settings = entry
+    if (root.hostWidget) root.hostWidget.settings = entry
+    if (root.bar && root.bar.shell && typeof root.bar.shell.updateEntryInline === "function")
+      root.bar.shell.updateEntryInline(root.moduleName, entry)
+  }
+
+  function cycleLanguage() {
+    persistLanguage(Model.otherLang(root.lang))
   }
 
   function refresh() {
@@ -107,7 +123,7 @@ Panel {
     var event = root.nextEvent || root.lastEvent
     if (!root.bar) return
     var summary = Model.notifySummary(event)
-    var body = Model.notifyBody(event, root.snapshot.table)
+    var body = Model.notifyBody(event, root.snapshot.table, root.lang)
     root.bar.run("omarchy-notification-send " + shellQuote(summary) + " " + shellQuote(body))
   }
 
@@ -152,13 +168,13 @@ Panel {
         root.loading = false
         var raw = String(text || "").trim()
         if (!raw) {
-          root.fetchError = "empty response"
+          root.fetchError = "empty"
           return
         }
         try {
           root.applyBundle(raw)
         } catch (e) {
-          root.fetchError = "parse failed"
+          root.fetchError = "parse"
         }
       }
     }
@@ -235,7 +251,7 @@ Panel {
               spacing: Style.space(4)
 
               Text {
-                text: root.nextEvent && root.nextEvent.status === "live" ? "NA ŻYWO" : "NASTĘPNY MECZ"
+                text: root.nextEvent && root.nextEvent.status === "live" ? Model.t(root.lang, "live") : Model.t(root.lang, "nextMatch")
                 color: Qt.darker(root.contentForeground, 1.5)
                 font.family: root.contentFontFamily
                 font.pixelSize: Style.font.bodySmall
@@ -243,7 +259,7 @@ Panel {
               }
 
               Text {
-                text: root.nextEvent ? ("vs " + root.nextEvent.opponent) : "Brak terminu"
+                text: root.nextEvent ? ("vs " + root.nextEvent.opponent) : Model.t(root.lang, "noFixture")
                 color: root.contentForeground
                 font.family: root.contentFontFamily
                 font.pixelSize: 26
@@ -254,7 +270,7 @@ Panel {
 
               Text {
                 visible: !!root.nextEvent
-                text: root.nextEvent ? Model.formatWhenLong(root.nextEvent.kickoffMs) : ""
+                text: root.nextEvent ? Model.formatWhenLong(root.nextEvent.kickoffMs, root.lang) : ""
                 color: root.contentForeground
                 font.family: root.contentFontFamily
                 font.pixelSize: Style.font.title
@@ -270,7 +286,7 @@ Panel {
 
               Text {
                 anchors.right: parent.right
-                text: root.nextEvent && root.nextEvent.status === "live" ? Model.scoreline(root.nextEvent) : (root.usRow ? (root.usRow.position + ".") : "")
+                text: root.nextEvent && root.nextEvent.status === "live" ? Model.scoreline(root.nextEvent) : (root.usRow ? Model.ordinal(root.usRow.position, root.lang) : "")
                 color: root.contentForeground
                 font.family: root.contentFontFamily
                 font.pixelSize: 36
@@ -279,7 +295,7 @@ Panel {
 
               Text {
                 anchors.right: parent.right
-                text: root.nextEvent && root.nextEvent.status === "live" ? "live" : (root.usRow ? (root.usRow.points + " pkt") : "")
+                text: root.nextEvent && root.nextEvent.status === "live" ? Model.t(root.lang, "liveShort") : Model.pointsLine(root.snapshot.table, root.lang)
                 color: Qt.darker(root.contentForeground, 1.4)
                 font.family: root.contentFontFamily
                 font.pixelSize: Style.font.body
@@ -289,7 +305,7 @@ Panel {
 
           Text {
             visible: !!root.nextEvent
-            text: root.nextEvent ? Model.competitionLine(root.nextEvent) : ""
+            text: root.nextEvent ? Model.competitionLine(root.nextEvent, root.lang) : ""
             color: Qt.darker(root.contentForeground, 1.4)
             font.family: root.contentFontFamily
             font.pixelSize: Style.font.bodySmall
@@ -312,7 +328,7 @@ Panel {
             rightPadding: Style.space(16)
 
             PanelSectionHeader {
-              text: "OSTATNI WYNIK"
+              text: Model.t(root.lang, "lastResult")
               foreground: root.contentForeground
               fontFamily: root.contentFontFamily
             }
@@ -357,7 +373,7 @@ Panel {
             rightPadding: Style.space(16)
 
             PanelSectionHeader {
-              text: "NADCHODZĄCE"
+              text: Model.t(root.lang, "upcoming")
               foreground: root.contentForeground
               fontFamily: root.contentFontFamily
             }
@@ -373,7 +389,7 @@ Panel {
 
                 Text {
                   width: Style.space(72)
-                  text: Model.formatWhen(modelData.kickoffMs, root.nowMs)
+                  text: Model.formatWhen(modelData.kickoffMs, root.nowMs, root.lang)
                   color: Qt.darker(root.contentForeground, 1.4)
                   font.family: root.contentFontFamily
                   font.pixelSize: Style.font.bodySmall
@@ -391,7 +407,7 @@ Panel {
                 }
 
                 Text {
-                  text: modelData.isHome ? "H" : "A"
+                  text: Model.venueMark(modelData, root.lang)
                   color: Qt.darker(root.contentForeground, 1.5)
                   font.family: root.contentFontFamily
                   font.pixelSize: Style.font.caption
@@ -417,7 +433,7 @@ Panel {
             rightPadding: Style.space(16)
 
             PanelSectionHeader {
-              text: "TABELA"
+              text: Model.t(root.lang, "table")
               foreground: root.contentForeground
               fontFamily: root.contentFontFamily
             }
@@ -474,7 +490,7 @@ Panel {
 
           Text {
             visible: root.loading && !root.snapshot.ok
-            text: "Pobieranie terminów…"
+            text: Model.t(root.lang, "loading")
             color: Qt.darker(root.contentForeground, 1.5)
             font.family: root.contentFontFamily
             font.pixelSize: Style.font.bodySmall
@@ -484,7 +500,7 @@ Panel {
 
           Text {
             visible: root.fetchError !== "" && !root.snapshot.ok
-            text: root.fetchError
+            text: Model.t(root.lang, "error." + root.fetchError)
             color: Qt.darker(root.contentForeground, 1.5)
             font.family: root.contentFontFamily
             font.pixelSize: Style.font.bodySmall
@@ -493,12 +509,30 @@ Panel {
           }
 
           Text {
-            visible: Model.sourceCaption(root.snapshot) !== ""
-            text: Model.sourceCaption(root.snapshot)
+            visible: Model.sourceCaption(root.snapshot, root.lang) !== ""
+            text: Model.sourceCaption(root.snapshot, root.lang)
             color: Qt.darker(root.contentForeground, 1.6)
             font.family: root.contentFontFamily
             font.pixelSize: Style.font.caption
             leftPadding: Style.space(16)
+          }
+
+          Text {
+            text: Model.t(root.lang, "languageName")
+            color: Qt.darker(root.contentForeground, 1.4)
+            font.family: root.contentFontFamily
+            font.pixelSize: Style.font.caption
+            leftPadding: Style.space(16)
+            font.underline: languageTap.containsMouse
+
+            HoverHandler {
+              id: languageTap
+              cursorShape: Qt.PointingHandCursor
+            }
+
+            TapHandler {
+              onTapped: root.cycleLanguage()
+            }
           }
         }
       }
