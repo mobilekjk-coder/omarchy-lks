@@ -484,7 +484,7 @@ Panel {
               Text {
                 required property var modelData
                 width: bodyColumn.width - Style.space(32)
-                text: Model.upcomingLine(modelData)
+                text: Model.upcomingLine(modelData, root.lang)
                 color: root.contentForeground
                 font.family: root.contentFontFamily
                 font.pixelSize: Style.font.bodySmall

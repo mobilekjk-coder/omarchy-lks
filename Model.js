@@ -832,12 +832,12 @@ function upcomingCompetition(event, lang) {
   return "1L"
 }
 
-function upcomingLine(event) {
+function upcomingLine(event, lang) {
   if (!event) return ""
   var d = new Date(event.kickoffMs)
   var when = pad2(d.getDate()) + "." + pad2(d.getMonth() + 1) + " " + pad2(d.getHours()) + ":" + pad2(d.getMinutes())
   var comp = upcomingCompetition(event)
-  var venue = event.isHome ? "D" : "W"
+  var venue = venueMark(event, lang)
   return when + "   " + comp + "  " + venue + "  " + event.opponent
 }
 
