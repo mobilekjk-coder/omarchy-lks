@@ -1,6 +1,6 @@
 # ŁKS — Omarchy plugin
 
-Bar widget for [ŁKS Łódź](https://lkslodz.pl/). The first version tracks the men's first football team: next match, last result, upcoming fixtures, and the I liga table.
+Bar widget for [ŁKS Łódź](https://lkslodz.pl/) and the friendly clubs: Lech Poznań, GKS Tychy, and Zawisza Bydgoszcz. Men's first football: next match, last result, upcoming fixtures, and the league table. Switch club and language from the panel header.
 
 Plugin id: `kjk.lks`
 
@@ -42,33 +42,41 @@ Set these on the bar entry (Setup, or `omarchy bar set`):
 |---|---|---|
 | `source` | `auto` | `auto`, `lkslodz`, or `thesportsdb` |
 | `language` | `auto` | `auto` (desktop locale), `pl`, or `en` |
+| `club` | `lks` | `lks`, `lech`, `tychy`, or `zawisza` |
 | `section` | `football-men` | Only men's first football is implemented so far |
 | `refreshMinutes` | `15` | How often to refetch |
 
 ```bash
 omarchy bar set kjk.lks source thesportsdb
 omarchy bar set kjk.lks language pl
+omarchy bar set kjk.lks club lech
 omarchy bar set kjk.lks refreshMinutes 10
 ```
 
-The panel, bar label, and notifications follow that language. `auto` uses Polish when the desktop locale is Polish, otherwise English. You can also tap the language name at the bottom of the panel to switch between Polski and English.
+The panel, bar label, and notifications follow that language. `auto` uses Polish when the desktop locale is Polish, otherwise English. Tap **PL** / **EN** in the panel header to switch. Tap **ŁKS · LECH · TYCHY · ZAW** to switch club.
 
-`auto` merges three public sources:
+`auto` picks sources per club:
 
-- [lkslodz.pl](https://lkslodz.pl/) for the club match list and table
-- [1liga.org](https://www.1liga.org/lks) for confirmed Betclic 1 Liga dates and kickoff times (TV can move a round from Saturday 17:00 to Friday–Monday)
-- [TheSportsDB](https://www.thesportsdb.com/) for cup ties the club API still omits
+- ŁKS — [lkslodz.pl](https://lkslodz.pl/) + [1liga.org](https://www.1liga.org/lks) + [TheSportsDB](https://www.thesportsdb.com/)
+- Lech — [ekstraklasa.org](https://ekstraklasa.org/kluby/lech-poznan/) + TheSportsDB (Europa / cup)
+- GKS Tychy and Zawisza — [drugaliga.org](https://www.drugaliga.org/) + TheSportsDB
 
 ## Data sources
 
 No API key. The widget only reads public JSON:
 
 - [lkslodz.pl](https://lkslodz.pl/) — official `/wp-json/lks/v1/matches` and `/league-table`
-- [TheSportsDB](https://www.thesportsdb.com/) — documented free API, team id `137112`
+- [ekstraklasa.org](https://ekstraklasa.org/) — Lech league calendar
+- [drugaliga.org](https://www.drugaliga.org/) — GKS Tychy and Zawisza calendar and table
+- [TheSportsDB](https://www.thesportsdb.com/) — documented free API (cups and Europe)
 
-Kickoff times from the club site are treated as Europe/Warsaw, then shown in your desktop timezone. Results and tables come from those sites; this plugin is unofficial and not affiliated with ŁKS Łódź.
+Kickoff times from Polish sites are treated as Europe/Warsaw, then shown in your desktop timezone. Results and tables come from those sites; this plugin is unofficial and not affiliated with the clubs.
 
 Other club sections (volleyball, basketball, and so on) are not wired yet. The fetch layer is built so a new section is another source entry plus a parser.
+
+## Related
+
+A separate project, **Rycerze Wiosny Engine**, is the shared fixture repository this widget and future apps will pull from.
 
 ## License
 

@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
-"""Download raw payloads for one ŁKS section/source pair.
+"""Download raw payloads for one club/section/source.
 
-Parsers live in Model.js. This script only fetches, so a new section is
-another entry in SECTIONS plus a parser — not a new HTTP stack.
+Parsers live in Model.js. This script only fetches.
 """
 from __future__ import annotations
 
@@ -12,18 +11,22 @@ import re
 import sys
 import urllib.error
 import urllib.request
+from datetime import datetime, timezone
 
 UA = "kjk.lks-omarchy/0.3 (personal Omarchy widget; +https://github.com/mobilekjk-coder/omarchy-lks)"
-LIGA_UA = (
+BROWSER_UA = (
     "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
     "(KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36"
 )
 
-# Per-section source catalogue. `auto` merges the club site with TheSportsDB,
-# because the club API currently omits cup ties.
-SECTIONS = {
-    "football-men": {
-        "default_source": "lkslodz",
+SEASON = "2026-2027"
+
+CLUBS = {
+    "lks": {
+        "id": "lks",
+        "name": "ŁKS Łódź",
+        "sportsdb_id": "137112",
+        "league_id": "4661",
         "sources": {
             "lkslodz": {
                 "label": "lkslodz.pl",
@@ -32,26 +35,57 @@ SECTIONS = {
                     "table": "https://lkslodz.pl/wp-json/lks/v1/league-table",
                 },
             },
-            "1liga": {
-                "label": "1liga.org",
-                "endpoints": {},
-            },
+            "1liga": {"label": "1liga.org", "kind": "1liga", "url": "https://www.1liga.org/lks"},
             "thesportsdb": {
                 "label": "TheSportsDB",
-                "endpoints": {
-                    "next": "https://www.thesportsdb.com/api/v1/json/3/eventsnext.php?id=137112",
-                    "last": "https://www.thesportsdb.com/api/v1/json/3/eventslast.php?id=137112",
-                    "table": "https://www.thesportsdb.com/api/v1/json/3/lookuptable.php?l=4661&s=2026-2027",
-                },
-                # Team next/last often skip the Polish Cup. These searches fill
-                # that hole until the club API lists the tie.
-                "event_searches": [
-                    "GKS_Tychy_vs_LKS_Lodz",
-                    "LKS_Lodz_vs_GKS_Tychy",
-                ],
+                "event_searches": ["GKS_Tychy_vs_LKS_Lodz", "LKS_Lodz_vs_GKS_Tychy"],
             },
         },
-    }
+    },
+    "lech": {
+        "id": "lech",
+        "name": "Lech Poznań",
+        "sportsdb_id": "134010",
+        "league_id": "4422",
+        "sources": {
+            "ekstraklasa": {
+                "label": "ekstraklasa.org",
+                "kind": "ekstraklasa",
+                "url": "https://ekstraklasa.org/kluby/lech-poznan/",
+            },
+            "thesportsdb": {"label": "TheSportsDB"},
+        },
+    },
+    "tychy": {
+        "id": "tychy",
+        "name": "GKS Tychy",
+        "sportsdb_id": "138917",
+        "league_id": "5709",
+        "sources": {
+            "drugaliga": {
+                "label": "drugaliga.org",
+                "kind": "drugaliga",
+                "url": "https://www.drugaliga.org/gks-tychy",
+                "table_url": "https://www.drugaliga.org/tabela-2026/27",
+            },
+            "thesportsdb": {"label": "TheSportsDB"},
+        },
+    },
+    "zawisza": {
+        "id": "zawisza",
+        "name": "Zawisza Bydgoszcz",
+        "sportsdb_id": "134612",
+        "league_id": "5709",
+        "sources": {
+            "drugaliga": {
+                "label": "drugaliga.org",
+                "kind": "drugaliga",
+                "url": "https://www.drugaliga.org/zawisza-bydgoszcz",
+                "table_url": "https://www.drugaliga.org/tabela-2026/27",
+            },
+            "thesportsdb": {"label": "TheSportsDB"},
+        },
+    },
 }
 
 
@@ -60,6 +94,25 @@ def get_json(url: str) -> object:
     with urllib.request.urlopen(req, timeout=15) as resp:
         raw = resp.read().decode("utf-8", "replace")
     return json.loads(raw)
+
+
+def get_html(url: str) -> str:
+    req = urllib.request.Request(
+        url,
+        headers={"User-Agent": BROWSER_UA, "Accept": "text/html", "Accept-Language": "pl-PL,pl;q=0.9"},
+    )
+    with urllib.request.urlopen(req, timeout=20) as resp:
+        return resp.read().decode("utf-8", "replace")
+
+
+def sportsdb_urls(club: dict) -> dict:
+    team = club["sportsdb_id"]
+    league = club["league_id"]
+    return {
+        "next": f"https://www.thesportsdb.com/api/v1/json/3/eventsnext.php?id={team}",
+        "last": f"https://www.thesportsdb.com/api/v1/json/3/eventslast.php?id={team}",
+        "table": f"https://www.thesportsdb.com/api/v1/json/3/lookuptable.php?l={league}&s={SEASON}",
+    }
 
 
 def fetch_event_searches(source: dict) -> dict:
@@ -109,35 +162,155 @@ def parse_1liga_html(html: str) -> list:
     return fixtures
 
 
-def fetch_1liga() -> dict:
-    req = urllib.request.Request(
-        "https://www.1liga.org/lks",
-        headers={"User-Agent": LIGA_UA, "Accept": "text/html", "Accept-Language": "pl-PL,pl;q=0.9"},
+def fetch_1liga(url: str) -> dict:
+    return {"fixtures": parse_1liga_html(get_html(url))}
+
+
+def parse_ekstraklasa_html(html: str) -> list:
+    pat = re.compile(
+        r'matchDatetime\\":\\"([^\\]+)\\",\\"date\\":\\"([^\\]+)\\",\\"time\\":\\"([^\\]*)\\",'
+        r'\\"venue\\":\\"([^\\]*)\\",\\"isAway\\":(true|false),\\"homeTeam\\":\{\\"name\\":\\"([^\\]+)\\"'
+        r'.*?\\"awayTeam\\":\{\\"name\\":\\"([^\\]+)\\".*?\\"homeScore\\":(null|\d+),\\"awayScore\\":(null|\d+)',
+        re.S,
     )
-    with urllib.request.urlopen(req, timeout=20) as resp:
-        html = resp.read().decode("utf-8", "replace")
-    return {"fixtures": parse_1liga_html(html)}
+    now = datetime.now(timezone.utc)
+    fixtures = []
+    for dt, date, time, venue, is_away, home, away, hs, aus in pat.findall(html):
+        try:
+            kickoff = datetime.fromisoformat(dt)
+        except ValueError:
+            kickoff = None
+        future = kickoff is not None and kickoff > now
+        home_score = None if hs == "null" or (future and hs == "0" and aus == "0") else hs
+        away_score = None if aus == "null" or (future and hs == "0" and aus == "0") else aus
+        status = "scheduled" if future or home_score is None else "finished"
+        fixtures.append({
+            "home": home,
+            "away": away,
+            "round": "",
+            "kickoff": kickoff.isoformat() if kickoff else "",
+            "venue": venue.replace("\\u0026", "&"),
+            "status": status,
+            "homeScore": home_score,
+            "awayScore": away_score,
+            "isAway": is_away == "true",
+            "competition": "Ekstraklasa",
+        })
+    return fixtures
 
 
-def fetch_source(section_id: str, source_id: str) -> dict:
-    section = SECTIONS[section_id]
-    source = section["sources"][source_id]
-    if source_id == "1liga":
-        return {
-            "ok": True,
-            "section": section_id,
-            "source": source_id,
-            "sourceLabel": source["label"],
-            "payloads": {"liga": fetch_1liga()},
-        }
+def fetch_ekstraklasa(url: str) -> dict:
+    return {"fixtures": parse_ekstraklasa_html(get_html(url))}
+
+
+def parse_drugaliga_fixtures(html: str) -> list:
+    fixtures = []
+    for block in html.split("timetable-item-date")[1:]:
+        date_m = re.search(r"<span>\s*([^<]+?)\s*</span>", block)
+        teams = re.findall(r'class="d-none d-sm-block">([^<]+)', block)
+        if len(teams) < 2:
+            teams = re.findall(r'class="d-sm-none[^"]*">([^<]+)', block)
+        if not date_m or len(teams) < 2:
+            continue
+        stamp = re.sub(r"\s+", " ", date_m.group(1)).strip()
+        found = re.search(r"(\d{2})\.(\d{2})\.(\d{4})(?:[,\s]+(\d{1,2}):(\d{2}))?", stamp)
+        if not found:
+            continue
+        day = found.group(3) + "-" + found.group(2) + "-" + found.group(1)
+        clock = "17:00"
+        if found.group(4):
+            clock = found.group(4).zfill(2) + ":" + found.group(5)
+        result_m = re.search(r'class="result-wrapper[^"]*"[^>]*>\s*([^<]+)', block)
+        result = re.sub(r"\s+", " ", result_m.group(1)).strip() if result_m else "vs"
+        score = re.search(r"(\d+)\s*[:\-]\s*(\d+)", result)
+        home_score = score.group(1) if score else None
+        away_score = score.group(2) if score else None
+        fixtures.append({
+            "home": teams[0].strip(),
+            "away": teams[1].strip(),
+            "round": "",
+            "kickoff": day + " " + clock + ":00",
+            "status": "finished" if score else "scheduled",
+            "homeScore": home_score,
+            "awayScore": away_score,
+            "competition": "II liga",
+        })
+    return fixtures
+
+
+def _cell_text(cell: str) -> str:
+    text = re.sub(r"<[^>]+>", " ", cell)
+    return re.sub(r"\s+", " ", text).strip()
+
+
+def parse_drugaliga_table(html: str) -> list:
+    table = []
+    for row in re.finditer(r"<tr[^>]*>([\s\S]*?)</tr>", html):
+        body = row.group(1)
+        name_m = re.search(r'class="whole-name[^"]*">([^<]+)', body)
+        if not name_m:
+            continue
+        cells = [_cell_text(c) for c in re.findall(r"<td[^>]*>([\s\S]*?)</td>", body)]
+        if len(cells) < 8:
+            continue
+        goals = re.sub(r"\s+", "", cells[4])
+        table.append({
+            "position": int(cells[0] or 0),
+            "name": name_m.group(1).strip(),
+            "played": int(cells[2] or 0),
+            "points": int(cells[3] or 0),
+            "wins": int(cells[5] or 0),
+            "draws": int(cells[6] or 0),
+            "losses": int(cells[7] or 0),
+            "goals": goals,
+        })
+    return table
+
+
+def fetch_drugaliga(source: dict) -> dict:
+    fixtures = parse_drugaliga_fixtures(get_html(source["url"]))
+    table = []
+    table_url = source.get("table_url")
+    if table_url:
+        try:
+            table = parse_drugaliga_table(get_html(table_url))
+        except (urllib.error.URLError, urllib.error.HTTPError, TimeoutError, OSError):
+            table = []
+    return {"fixtures": fixtures, "table": table}
+
+
+def fetch_thesportsdb(club: dict, source: dict) -> dict:
     payloads = {}
-    for name, url in source["endpoints"].items():
+    for name, url in sportsdb_urls(club).items():
         payloads[name] = get_json(url)
     searches = fetch_event_searches(source)
     if searches:
         payloads["cup"] = searches
+    return payloads
+
+
+def fetch_source(club_id: str, section_id: str, source_id: str) -> dict:
+    club = CLUBS[club_id]
+    source = club["sources"][source_id]
+    kind = source.get("kind") or source_id
+    if kind == "1liga":
+        payloads = {"liga": fetch_1liga(source["url"])}
+    elif kind == "ekstraklasa":
+        payloads = {"ekstraklasa": fetch_ekstraklasa(source["url"])}
+    elif kind == "drugaliga":
+        payloads = {"drugaliga": fetch_drugaliga(source)}
+    elif source_id == "thesportsdb":
+        payloads = fetch_thesportsdb(club, source)
+    else:
+        payloads = {}
+        for name, url in (source.get("endpoints") or {}).items():
+            payloads[name] = get_json(url)
+        searches = fetch_event_searches(source)
+        if searches:
+            payloads["cup"] = searches
     return {
         "ok": True,
+        "club": club_id,
         "section": section_id,
         "source": source_id,
         "sourceLabel": source["label"],
@@ -145,14 +318,14 @@ def fetch_source(section_id: str, source_id: str) -> dict:
     }
 
 
-def fetch_merged(section_id: str) -> dict:
+def fetch_merged(club_id: str, section_id: str) -> dict:
     errors = []
     payloads = {}
     labels = []
 
-    for source_id in SECTIONS[section_id]["sources"]:
+    for source_id in CLUBS[club_id]["sources"]:
         try:
-            bundle = fetch_source(section_id, source_id)
+            bundle = fetch_source(club_id, section_id, source_id)
         except (urllib.error.URLError, urllib.error.HTTPError, TimeoutError, json.JSONDecodeError, OSError) as exc:
             errors.append(source_id + ": " + str(exc))
             continue
@@ -174,6 +347,7 @@ def fetch_merged(section_id: str) -> dict:
 
     return {
         "ok": True,
+        "club": club_id,
         "section": section_id,
         "source": "merged",
         "sourceLabel": " + ".join(labels) if labels else "merged",
@@ -184,43 +358,59 @@ def fetch_merged(section_id: str) -> dict:
 
 def usable(bundle: dict) -> bool:
     payloads = bundle.get("payloads") or {}
-    if bundle.get("source") in ("lkslodz", "merged"):
+    source = bundle.get("source")
+    if source in ("lkslodz", "merged"):
         matches = payloads.get("matches") or {}
         if isinstance(matches, dict) and matches.get("success") and matches.get("data"):
             return True
-    if bundle.get("source") in ("thesportsdb", "merged"):
-        return bool(payloads.get("next") or payloads.get("last") or payloads.get("table") or payloads.get("cup"))
-    if bundle.get("source") in ("1liga", "merged"):
+    if source in ("thesportsdb", "merged"):
+        if payloads.get("next") or payloads.get("last") or payloads.get("table") or payloads.get("cup"):
+            return True
+    if source in ("1liga", "merged"):
         liga = payloads.get("liga") or {}
-        return bool(liga.get("fixtures"))
+        if liga.get("fixtures"):
+            return True
+    if source in ("ekstraklasa", "merged"):
+        eks = payloads.get("ekstraklasa") or {}
+        if eks.get("fixtures"):
+            return True
+    if source in ("drugaliga", "merged"):
+        liga2 = payloads.get("drugaliga") or {}
+        if liga2.get("fixtures") or liga2.get("table"):
+            return True
     return bool(payloads)
 
 
 def main() -> int:
     parser = argparse.ArgumentParser()
+    parser.add_argument("--club", default="lks")
     parser.add_argument("--section", default="football-men")
     parser.add_argument("--source", default="auto")
     args = parser.parse_args()
 
-    if args.section not in SECTIONS:
+    club_id = (args.club or "lks").strip().lower()
+    if club_id not in CLUBS:
+        json.dump({"ok": False, "error": "unknown club: " + club_id}, sys.stdout)
+        return 1
+    if args.section != "football-men":
         json.dump({"ok": False, "error": "unknown section: " + args.section}, sys.stdout)
         return 1
 
-    sources = SECTIONS[args.section]["sources"]
+    sources = CLUBS[club_id]["sources"]
     preference = (args.source or "auto").strip().lower()
 
     try:
         if preference in ("", "auto", "merged"):
-            bundle = fetch_merged(args.section)
+            bundle = fetch_merged(club_id, args.section)
         elif preference in sources:
-            bundle = fetch_source(args.section, preference)
+            bundle = fetch_source(club_id, args.section, preference)
             if not usable(bundle):
                 raise RuntimeError("empty payload")
         else:
-            json.dump({"ok": False, "error": "unknown source: " + preference}, sys.stdout)
+            json.dump({"ok": False, "error": "unknown source: " + preference, "club": club_id}, sys.stdout)
             return 1
     except (urllib.error.URLError, urllib.error.HTTPError, TimeoutError, json.JSONDecodeError, OSError, RuntimeError) as exc:
-        json.dump({"ok": False, "section": args.section, "error": str(exc)}, sys.stdout)
+        json.dump({"ok": False, "club": club_id, "section": args.section, "error": str(exc)}, sys.stdout)
         return 1
 
     json.dump(bundle, sys.stdout, ensure_ascii=False)

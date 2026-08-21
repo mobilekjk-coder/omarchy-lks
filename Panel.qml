@@ -24,10 +24,12 @@ Panel {
     var url = String(Qt.resolvedUrl("."))
     return url.replace(/^file:\/\//, "").replace(/\/$/, "")
   }
-  readonly property string cachePath: Quickshell.env("HOME") + "/.local/state/omarchy/kjk.lks/cache.json"
+  readonly property string cachePath: Quickshell.env("HOME") + "/.local/state/omarchy/kjk.lks/cache-" + clubId + ".json"
   readonly property string sourcePref: String(setting("source", "auto") || "auto")
   readonly property string sectionId: String(setting("section", "football-men") || "football-men")
   readonly property string languagePref: String(setting("language", "auto") || "auto")
+  readonly property string clubId: Model.resolveClubId(setting("club", "lks"))
+  readonly property var club: Model.clubById(clubId)
   readonly property bool includeFriendlies: setting("includeFriendlies", false) === true
   readonly property int refreshMinutes: Math.max(5, parseInt(setting("refreshMinutes", 15), 10) || 15)
   readonly property var nowMs: clock.date.getTime()
@@ -42,8 +44,8 @@ Panel {
   readonly property var usRow: Model.ourStanding(snapshot.table)
 
   readonly property string label: root.vertical
-    ? Model.barLabelVertical(snapshot, nowMs, includeFriendlies)
-    : Model.barLabel(snapshot, nowMs, includeFriendlies, lang)
+    ? Model.barLabelVertical(snapshot, nowMs, includeFriendlies, club)
+    : Model.barLabel(snapshot, nowMs, includeFriendlies, lang, club)
 
   readonly property color contentForeground: bar ? bar.foreground : Color.foreground
   readonly property string contentFontFamily: bar ? bar.fontFamily : Style.font.family
@@ -99,14 +101,28 @@ Panel {
     }
   }
 
-  function persistLanguage(next) {
+  function persistSettings(patch) {
     var entry = { id: root.moduleName }
     for (var key in root.settings) if (key !== "id") entry[key] = root.settings[key]
-    entry.language = next
+    for (var field in patch) entry[field] = patch[field]
     root.settings = entry
     if (root.hostWidget) root.hostWidget.settings = entry
     if (root.bar && root.bar.shell && typeof root.bar.shell.updateEntryInline === "function")
       root.bar.shell.updateEntryInline(root.moduleName, entry)
+  }
+
+  function persistLanguage(next) {
+    persistSettings({ language: next })
+  }
+
+  function persistClub(next) {
+    if (Model.resolveClubId(next) === root.clubId) return
+    persistSettings({ club: Model.resolveClubId(next) })
+    root.snapshot = Model.emptySnapshot()
+    Qt.callLater(function() {
+      cacheFile.reload()
+      root.refresh()
+    })
   }
 
   function cycleLanguage() {
@@ -116,14 +132,14 @@ Panel {
   function refresh() {
     if (fetchProc.running) fetchProc.running = false
     root.loading = true
-    fetchProc.command = ["python3", root.pluginDir + "/fetch.py", "--section", root.sectionId, "--source", root.sourcePref]
+    fetchProc.command = ["python3", root.pluginDir + "/fetch.py", "--club", root.clubId, "--section", root.sectionId, "--source", root.sourcePref]
     fetchProc.running = true
   }
 
   function notifyNext() {
     var event = root.nextEvent || root.lastEvent
     if (!root.bar) return
-    var summary = Model.notifySummary(event)
+    var summary = Model.notifySummary(event, root.club)
     var body = Model.notifyBody(event, root.snapshot.table, root.lang)
     root.bar.run("omarchy-notification-send " + shellQuote(summary) + " " + shellQuote(body))
   }
@@ -242,12 +258,56 @@ Panel {
 
           Item {
             width: parent.width
-            height: languageRow.height
+            height: Math.max(clubRow.height, languageRow.height)
+
+          Row {
+            id: clubRow
+            anchors.left: parent.left
+            anchors.leftMargin: Style.space(16)
+            anchors.verticalCenter: parent.verticalCenter
+            spacing: Style.space(8)
+
+            Repeater {
+              model: ["lks", "lech", "tychy", "zawisza"]
+
+              Row {
+                required property string modelData
+                required property int index
+                spacing: Style.space(8)
+
+                Text {
+                  visible: index > 0
+                  text: "·"
+                  color: Qt.darker(root.contentForeground, 1.6)
+                  font.family: root.contentFontFamily
+                  font.pixelSize: Style.font.bodySmall
+                }
+
+                Text {
+                  text: Model.clubById(modelData).code
+                  color: root.clubId === modelData ? root.contentForeground : Qt.darker(root.contentForeground, 1.6)
+                  font.family: root.contentFontFamily
+                  font.pixelSize: Style.font.bodySmall
+                  font.bold: root.clubId === modelData
+                  font.letterSpacing: 1
+
+                  MouseArea {
+                    anchors.fill: parent
+                    anchors.margins: -Style.space(6)
+                    hoverEnabled: true
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: root.persistClub(modelData)
+                  }
+                }
+              }
+            }
+          }
 
           Row {
             id: languageRow
             anchors.right: parent.right
             anchors.rightMargin: Style.space(20)
+            anchors.verticalCenter: parent.verticalCenter
             spacing: Style.space(8)
 
             Text {
@@ -484,7 +544,7 @@ Panel {
               Text {
                 required property var modelData
                 width: bodyColumn.width - Style.space(32)
-                text: Model.upcomingLine(modelData, root.lang)
+                text: Model.upcomingLine(modelData, root.lang, root.club)
                 color: root.contentForeground
                 font.family: root.contentFontFamily
                 font.pixelSize: Style.font.bodySmall

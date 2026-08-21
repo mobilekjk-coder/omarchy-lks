@@ -14,6 +14,64 @@
 var TEAM = "ŁKS Łódź"
 var TEAM_SHORT = "ŁKS"
 var SECTION_FOOTBALL_MEN = "football-men"
+var DEFAULT_CLUB = "lks"
+
+var CLUB_ORDER = ["lks", "lech", "tychy", "zawisza"]
+var CLUBS = {
+  lks: {
+    id: "lks",
+    code: "ŁKS",
+    name: "ŁKS Łódź",
+    sportsdbId: "137112",
+    leagueCode: "1L",
+    needles: ["lkslodz"],
+    exact: ["lks"],
+    exclude: []
+  },
+  lech: {
+    id: "lech",
+    code: "LECH",
+    name: "Lech Poznań",
+    sportsdbId: "134010",
+    leagueCode: "EKS",
+    needles: ["lechpoznan"],
+    exact: ["lech"],
+    exclude: ["lechia"]
+  },
+  tychy: {
+    id: "tychy",
+    code: "TYCHY",
+    name: "GKS Tychy",
+    sportsdbId: "138917",
+    leagueCode: "2L",
+    needles: ["gkstychy", "tychy"],
+    exact: [],
+    exclude: []
+  },
+  zawisza: {
+    id: "zawisza",
+    code: "ZAW",
+    name: "Zawisza Bydgoszcz",
+    sportsdbId: "134612",
+    leagueCode: "2L",
+    needles: ["zawisza"],
+    exact: [],
+    exclude: []
+  }
+}
+
+function clubById(id) {
+  return CLUBS[String(id || "")] || CLUBS.lks
+}
+
+function resolveClubId(pref) {
+  var id = String(pref || DEFAULT_CLUB).toLowerCase().replace(/^\s+|\s+$/g, "")
+  return CLUBS[id] ? id : DEFAULT_CLUB
+}
+
+function clubIds() {
+  return CLUB_ORDER.slice()
+}
 
 var STRINGS = {
   pl: {
@@ -127,8 +185,24 @@ var SHORT_NAMES = {
   "wieczysta krakow": "Wieczysta",
   "unia skierniewice": "Unia",
   "slask wroclaw": "Śląsk",
-  "lks lodz": TEAM_SHORT,
-  "lks": TEAM_SHORT
+  "lks lodz": "ŁKS",
+  "lks": "ŁKS",
+  "lech poznan": "Lech",
+  "legia warszawa": "Legia",
+  "jagiellonia bialystok": "Jagiellonia",
+  "rakow czestochowa": "Raków",
+  "gornik zabrze": "Górnik",
+  "radomiak radom": "Radomiak",
+  "korona kielce": "Korona",
+  "wisla krakow": "Wisła Kr",
+  "wisla plock": "Płock",
+  "zaglebie lubin": "Zagłębie",
+  "gks katowice": "Katowice",
+  "pogon szczecin": "Pogoń",
+  "motor lublin": "Motor",
+  "cracovia": "Cracovia",
+  "widzew lodz": "Widzew",
+  "zawisza bydgoszcz": "Zawisza"
 }
 
 var LOGO_NAMES = {
@@ -159,6 +233,7 @@ var LOGO_NAMES = {
 function emptySnapshot() {
   return {
     ok: false,
+    club: DEFAULT_CLUB,
     section: SECTION_FOOTBALL_MEN,
     source: "",
     sourceLabel: "",
@@ -186,17 +261,39 @@ function compactName(value) {
   return foldName(value).replace(/\s+/g, "")
 }
 
-function isLksName(value) {
+function isClubName(value, club) {
+  club = club || CLUBS.lks
   var compact = compactName(value)
-  return compact === "lks" || compact === "lkslodz" || compact.indexOf("lkslodz") === 0
+  if (!compact) return false
+  var exclude = club.exclude || []
+  for (var e = 0; e < exclude.length; e++) {
+    if (compact.indexOf(exclude[e]) !== -1) return false
+  }
+  var exact = club.exact || []
+  for (var i = 0; i < exact.length; i++) {
+    if (compact === exact[i]) return true
+  }
+  var needles = club.needles || []
+  for (var n = 0; n < needles.length; n++) {
+    if (compact.indexOf(needles[n]) !== -1) return true
+  }
+  return false
+}
+
+function isLksName(value) {
+  return isClubName(value, CLUBS.lks)
 }
 
 function isReserveName(value) {
   return /(^| )(ii|2|rezerwy|rezerwa)( |$)/.test(foldName(value))
 }
 
+function isClubFirstTeam(value, club) {
+  return isClubName(value, club) && !isReserveName(value)
+}
+
 function isLksFirstTeam(value) {
-  return isLksName(value) && !isReserveName(value)
+  return isClubFirstTeam(value, CLUBS.lks)
 }
 
 function logoSlug(url) {
@@ -220,14 +317,20 @@ function sideName(side) {
   return nameFromLogo(side.logo)
 }
 
-function isLksSide(side, name) {
-  if (isLksName(name)) return true
+function isClubSide(side, name, club) {
+  if (isClubName(name, club)) return true
+  if (!club || club.id !== "lks") return false
   var slug = logoSlug(side && side.logo)
   return slug.indexOf("lks-lodz") !== -1 || slug === "lks_lodz"
 }
 
-function shortName(value) {
-  if (isLksName(value)) return TEAM_SHORT
+function isLksSide(side, name) {
+  return isClubSide(side, name, CLUBS.lks)
+}
+
+function shortName(value, club) {
+  if (club && isClubName(value, club)) return club.code
+  if (isLksName(value)) return "ŁKS"
   var folded = foldName(value)
   if (SHORT_NAMES[folded]) return SHORT_NAMES[folded]
   var text = String(value || "").replace(/^\s+|\s+$/g, "")
@@ -301,7 +404,9 @@ function addDays(ms, days) {
 function competitionKind(name) {
   var folded = foldName(name)
   if (/friendly|sparing|towarzyski/.test(folded)) return "friendly"
-  if (/puchar|cup/.test(folded)) return "cup"
+  if (/champions|liga mistrz|europa league|liga europy|conference|liga konferencji/.test(folded))
+    return "europe"
+  if (/puchar|polish cup/.test(folded)) return "cup"
   return "league"
 }
 
@@ -378,7 +483,8 @@ function buildEvent(fields) {
   }
 }
 
-function parseLkslodzMatches(raw, nowMs) {
+function parseLkslodzMatches(raw, nowMs, club) {
+  club = club || CLUBS.lks
   var payload = raw && raw.data ? raw.data : raw
   if (!Array.isArray(payload)) return []
   var events = []
@@ -386,10 +492,10 @@ function parseLkslodzMatches(raw, nowMs) {
     var row = payload[i] || {}
     var home = sideName(row.home)
     var away = sideName(row.away)
-    var homeIsUs = isLksSide(row.home, home)
-    var awayIsUs = isLksSide(row.away, away)
-    if (homeIsUs) home = TEAM
-    if (awayIsUs) away = TEAM
+    var homeIsUs = isClubSide(row.home, home, club)
+    var awayIsUs = isClubSide(row.away, away, club)
+    if (homeIsUs) home = club.name
+    if (awayIsUs) away = club.name
     var homeScore = parseScore(row.home && row.home.score)
     var awayScore = parseScore(row.away && row.away.score)
     var kickoffMs = parseLocalDateTime(row.date)
@@ -411,7 +517,8 @@ function parseLkslodzMatches(raw, nowMs) {
   return dedupeEvents(events)
 }
 
-function parseLkslodzTable(raw) {
+function parseClubTable(raw, club) {
+  club = club || CLUBS.lks
   var payload = raw && raw.data ? raw.data : raw
   if (!Array.isArray(payload)) return []
   var table = []
@@ -429,10 +536,14 @@ function parseLkslodzTable(raw) {
       goalsAgainst: parseInt(goals[1], 10) || 0,
       points: parseInt(row.points, 10) || 0,
       status: row.status || "",
-      isUs: isLksName(row.name)
+      isUs: isClubName(row.name, club)
     })
   }
   return table
+}
+
+function parseLkslodzTable(raw) {
+  return parseClubTable(raw, CLUBS.lks)
 }
 
 function collectSportsDbRows(payloads) {
@@ -452,12 +563,13 @@ function collectSportsDbRows(payloads) {
   return rows
 }
 
-function parseSportsDbEvent(row, sourceKey, nowMs) {
+function parseSportsDbEvent(row, sourceKey, nowMs, club) {
   if (!row) return null
+  club = club || CLUBS.lks
   var home = row.strHomeTeam || ""
   var away = row.strAwayTeam || ""
-  var homeIsUs = String(row.idHomeTeam) === "137112" || isLksFirstTeam(home)
-  var awayIsUs = String(row.idAwayTeam) === "137112" || isLksFirstTeam(away)
+  var homeIsUs = String(row.idHomeTeam) === String(club.sportsdbId) || isClubFirstTeam(home, club)
+  var awayIsUs = String(row.idAwayTeam) === String(club.sportsdbId) || isClubFirstTeam(away, club)
   if (!homeIsUs && !awayIsUs) return null
   var homeScore = parseScore(row.intHomeScore)
   var awayScore = parseScore(row.intAwayScore)
@@ -472,8 +584,8 @@ function parseSportsDbEvent(row, sourceKey, nowMs) {
     competition: row.strLeague || "",
     round: String(row.intRound || ""),
     kickoffMs: kickoffMs,
-    home: homeIsUs ? TEAM : home,
-    away: awayIsUs ? TEAM : away,
+    home: homeIsUs ? club.name : home,
+    away: awayIsUs ? club.name : away,
     homeScore: homeScore,
     awayScore: awayScore,
     status: normalizeStatus(row.strStatus, homeScore, awayScore, kickoffMs, nowMs),
@@ -482,17 +594,18 @@ function parseSportsDbEvent(row, sourceKey, nowMs) {
   })
 }
 
-function parseSportsDbEvents(payloads, nowMs) {
+function parseSportsDbEvents(payloads, nowMs, club) {
   var rows = collectSportsDbRows(payloads)
   var events = []
   for (var i = 0; i < rows.length; i++) {
-    var event = parseSportsDbEvent(rows[i], "tsdb" + i, nowMs)
+    var event = parseSportsDbEvent(rows[i], "tsdb" + i, nowMs, club)
     if (event) events.push(event)
   }
   return dedupeEvents(events)
 }
 
-function parseSportsDbTable(raw) {
+function parseSportsDbTable(raw, club) {
+  club = club || CLUBS.lks
   var payload = raw && raw.table ? raw.table : raw
   if (!Array.isArray(payload)) return []
   var table = []
@@ -509,10 +622,46 @@ function parseSportsDbTable(raw) {
       goalsAgainst: parseInt(row.intGoalsAgainst, 10) || 0,
       points: parseInt(row.intPoints, 10) || 0,
       status: row.strDescription || "",
-      isUs: String(row.idTeam) === "137112" || isLksName(row.strTeam)
+      isUs: String(row.idTeam) === String(club.sportsdbId) || isClubName(row.strTeam, club)
     })
   }
   return table
+}
+
+function parseListedEvents(raw, club, nowMs, sourceId) {
+  club = club || CLUBS.lks
+  var list = raw && raw.fixtures ? raw.fixtures : raw
+  if (!Array.isArray(list)) return []
+  var events = []
+  for (var i = 0; i < list.length; i++) {
+    var row = list[i] || {}
+    var home = row.home || ""
+    var away = row.away || ""
+    var homeIsUs = isClubFirstTeam(home, club)
+    var awayIsUs = isClubFirstTeam(away, club)
+    if (!homeIsUs && !awayIsUs) continue
+    var kickoffMs = null
+    if (row.kickoff && String(row.kickoff).indexOf("T") !== -1) kickoffMs = parseUtcTimestamp(row.kickoff)
+    if (kickoffMs === null) kickoffMs = parseLocalDateTime(row.kickoff)
+    var homeScore = parseScore(row.homeScore)
+    var awayScore = parseScore(row.awayScore)
+    var event = buildEvent({
+      id: (sourceId || "listed") + ":" + String(row.kickoff || i) + ":" + compactName(home) + ":" + compactName(away),
+      source: sourceId || "listed",
+      competition: row.competition || "",
+      round: String(row.round || ""),
+      kickoffMs: kickoffMs,
+      home: homeIsUs ? club.name : home,
+      away: awayIsUs ? club.name : away,
+      homeScore: homeScore,
+      awayScore: awayScore,
+      status: normalizeStatus(row.status, homeScore, awayScore, kickoffMs, nowMs),
+      venue: row.venue || "",
+      isHome: homeIsUs
+    })
+    if (event) events.push(event)
+  }
+  return dedupeEvents(events)
 }
 
 // Official kickoffs when a feed is stale. TheSportsDB still has the Tychy
@@ -520,6 +669,7 @@ function parseSportsDbTable(raw) {
 // CEST at Stadion Miejski w Tychach.
 var KICKOFF_CORRECTIONS = [
   {
+    club: "lks",
     opponent: "gks tychy",
     competitionKind: "cup",
     notBefore: "2026-08-01",
@@ -537,18 +687,19 @@ function teamsLooselyMatch(a, b) {
   return false
 }
 
-function parseLigaFixtures(raw) {
+function parseLigaFixtures(raw, club) {
+  club = club || CLUBS.lks
   var list = raw && raw.fixtures ? raw.fixtures : raw
   if (!Array.isArray(list)) return []
   var out = []
   for (var i = 0; i < list.length; i++) {
     var row = list[i] || {}
-    var homeIsUs = isLksFirstTeam(row.home)
-    var awayIsUs = isLksFirstTeam(row.away)
+    var homeIsUs = isClubFirstTeam(row.home, club)
+    var awayIsUs = isClubFirstTeam(row.away, club)
     if (!homeIsUs && !awayIsUs) continue
     out.push({
-      home: homeIsUs ? TEAM : row.home,
-      away: awayIsUs ? TEAM : row.away,
+      home: homeIsUs ? club.name : row.home,
+      away: awayIsUs ? club.name : row.away,
       opponent: homeIsUs ? row.away : row.home,
       isHome: homeIsUs,
       round: String(row.round || ""),
@@ -582,13 +733,15 @@ function applyLeagueSchedule(events, fixtures) {
   return list
 }
 
-function applyKickoffCorrections(events) {
+function applyKickoffCorrections(events, clubId) {
   var list = events || []
+  var wanted = clubId || DEFAULT_CLUB
   for (var i = 0; i < list.length; i++) {
     var event = list[i]
     if (!event || event.status === "finished") continue
     for (var j = 0; j < KICKOFF_CORRECTIONS.length; j++) {
       var fix = KICKOFF_CORRECTIONS[j]
+      if (fix.club && fix.club !== wanted) continue
       if (fix.competitionKind && event.competitionKind !== fix.competitionKind) continue
       if (foldName(event.opponent) !== fix.opponent) continue
       if (fix.notBefore && event.kickoffMs && event.kickoffMs < parseLocalDateTime(fix.notBefore + " 00:00:00")) continue
@@ -606,6 +759,8 @@ function parseBundle(bundle, nowMs) {
     snapshot.error = "empty bundle"
     return snapshot
   }
+  var club = clubById(bundle.club)
+  snapshot.club = club.id
   snapshot.section = bundle.section || SECTION_FOOTBALL_MEN
   snapshot.source = bundle.source || ""
   snapshot.sourceLabel = bundle.sourceLabel || bundle.source || ""
@@ -615,19 +770,18 @@ function parseBundle(bundle, nowMs) {
     return snapshot
   }
   var payloads = bundle.payloads || {}
-  if (snapshot.source === "thesportsdb") {
-    snapshot.events = parseSportsDbEvents(payloads, nowMs)
-    snapshot.table = parseSportsDbTable(payloads.table)
-  } else if (snapshot.source === "merged") {
-    snapshot.events = dedupeEvents(parseLkslodzMatches(payloads.matches, nowMs).concat(parseSportsDbEvents(payloads, nowMs)))
-    snapshot.table = parseLkslodzTable(payloads.table)
-    if (!snapshot.table.length) snapshot.table = parseSportsDbTable(payloads.table)
-  } else {
-    snapshot.events = parseLkslodzMatches(payloads.matches, nowMs)
-    snapshot.table = parseLkslodzTable(payloads.table)
-  }
-  snapshot.events = applyLeagueSchedule(snapshot.events, parseLigaFixtures(payloads.liga))
-  snapshot.events = applyKickoffCorrections(snapshot.events)
+  var events = []
+  if (payloads.matches) events = events.concat(parseLkslodzMatches(payloads.matches, nowMs, club))
+  if (payloads.next || payloads.last || payloads.cup) events = events.concat(parseSportsDbEvents(payloads, nowMs, club))
+  if (payloads.ekstraklasa) events = events.concat(parseListedEvents(payloads.ekstraklasa, club, nowMs, "ekstraklasa"))
+  if (payloads.drugaliga) events = events.concat(parseListedEvents(payloads.drugaliga, club, nowMs, "drugaliga"))
+  snapshot.events = dedupeEvents(events)
+  snapshot.table = parseClubTable(payloads.table, club)
+  if (!snapshot.table.length && payloads.drugaliga && payloads.drugaliga.table)
+    snapshot.table = parseClubTable(payloads.drugaliga.table, club)
+  if (!snapshot.table.length) snapshot.table = parseSportsDbTable(payloads.table, club)
+  snapshot.events = applyLeagueSchedule(snapshot.events, parseLigaFixtures(payloads.liga, club))
+  snapshot.events = applyKickoffCorrections(snapshot.events, club.id)
   snapshot.ok = snapshot.events.length > 0 || snapshot.table.length > 0
   if (!snapshot.ok) snapshot.error = bundle.error || "no events"
   return snapshot
@@ -638,7 +792,8 @@ function parseCache(raw, nowMs) {
     var data = JSON.parse(String(raw || ""))
     if (!data || typeof data !== "object") return emptySnapshot()
     if (data.events || data.table) {
-      data.events = applyKickoffCorrections(data.events || [])
+      data.club = resolveClubId(data.club)
+      data.events = applyKickoffCorrections(data.events || [], data.club)
       data.ok = !!(data.events && data.events.length) || !!(data.table && data.table.length)
       return data
     }
@@ -795,19 +950,21 @@ function resultForUs(event) {
   return "R"
 }
 
-function barLabel(snapshot, nowMs, includeFriendlies, lang) {
+function barLabel(snapshot, nowMs, includeFriendlies, lang, club) {
+  club = club || clubById(snapshot && snapshot.club)
   var next = pickNext(snapshot && snapshot.events, nowMs, includeFriendlies)
-  if (!next) return TEAM_SHORT
-  if (next.status === "live") return scoreline(next) + " " + shortName(next.opponent)
-  return "vs " + shortName(next.opponent) + " · " + formatWhen(next.kickoffMs, nowMs, lang)
+  if (!next) return club.code
+  if (next.status === "live") return scoreline(next) + " " + shortName(next.opponent, club)
+  return "vs " + shortName(next.opponent, club) + " · " + formatWhen(next.kickoffMs, nowMs, lang)
 }
 
-function barLabelVertical(snapshot, nowMs, includeFriendlies) {
+function barLabelVertical(snapshot, nowMs, includeFriendlies, club) {
+  club = club || clubById(snapshot && snapshot.club)
   var next = pickNext(snapshot && snapshot.events, nowMs, includeFriendlies)
-  if (!next) return TEAM_SHORT
-  if (next.status === "live") return TEAM_SHORT + "\n" + scoreline(next)
-  if (isSameDay(next.kickoffMs, nowMs)) return TEAM_SHORT + "\n" + formatClock(next.kickoffMs)
-  return TEAM_SHORT + "\n" + formatDayMonth(next.kickoffMs)
+  if (!next) return club.code
+  if (next.status === "live") return club.code + "\n" + scoreline(next)
+  if (isSameDay(next.kickoffMs, nowMs)) return club.code + "\n" + formatClock(next.kickoffMs)
+  return club.code + "\n" + formatDayMonth(next.kickoffMs)
 }
 
 function venueLine(event, lang) {
@@ -823,20 +980,28 @@ function venueMark(event, lang) {
 function displayCompetition(name, lang) {
   var folded = foldName(name)
   if (/puchar|polish cup/.test(folded)) return lang === "en" ? "Polish Cup" : "Puchar Polski"
+  if (/europa league|liga europy/.test(folded)) return lang === "en" ? "Europa League" : "Liga Europy"
+  if (/champions|liga mistrz/.test(folded)) return lang === "en" ? "Champions League" : "Liga Mistrzów"
+  if (/conference|liga konferencji/.test(folded)) return lang === "en" ? "Conference League" : "Liga Konferencji"
   return name || ""
 }
 
-function upcomingCompetition(event, lang) {
+function upcomingCompetition(event, club) {
   if (!event) return ""
-  if (event.competitionKind === "cup") return "PP"
-  return "1L"
+  var folded = foldName(event.competition)
+  if (/champions|liga mistrz/.test(folded)) return "LM"
+  if (/europa league|liga europy/.test(folded)) return "LE"
+  if (/conference|liga konferencji/.test(folded)) return "LKE"
+  if (event.competitionKind === "cup" || /puchar|polish cup/.test(folded)) return "PP"
+  if (event.competitionKind === "europe") return "UEFA"
+  return (club && club.leagueCode) || "1L"
 }
 
-function upcomingLine(event, lang) {
+function upcomingLine(event, lang, club) {
   if (!event) return ""
   var d = new Date(event.kickoffMs)
   var when = pad2(d.getDate()) + "." + pad2(d.getMonth() + 1) + " " + pad2(d.getHours()) + ":" + pad2(d.getMinutes())
-  var comp = upcomingCompetition(event)
+  var comp = upcomingCompetition(event, club)
   var venue = venueMark(event, lang)
   return when + "   " + comp + "  " + venue + "  " + event.opponent
 }
@@ -892,11 +1057,12 @@ function pointsLine(table, lang) {
   return row.points + " " + t(lang, "pts")
 }
 
-function notifySummary(event) {
-  if (!event) return TEAM_SHORT
+function notifySummary(event, club) {
+  var code = (club && club.code) || TEAM_SHORT
+  if (!event) return code
   if (event.status === "live" || event.status === "finished")
-    return TEAM_SHORT + " " + scoreline(event) + " " + shortName(event.opponent)
-  return TEAM_SHORT + " vs " + event.opponent
+    return code + " " + scoreline(event) + " " + shortName(event.opponent, club)
+  return code + " vs " + event.opponent
 }
 
 function notifyBody(event, table, lang) {
@@ -915,6 +1081,10 @@ function sourceCaption(snapshot, lang) {
 if (typeof module !== "undefined") {
   module.exports = {
     TEAM: TEAM,
+    CLUBS: CLUBS,
+    clubById: clubById,
+    resolveClubId: resolveClubId,
+    clubIds: clubIds,
     emptySnapshot: emptySnapshot,
     foldName: foldName,
     isLksName: isLksName,
