@@ -40,7 +40,7 @@ var CLUBS = {
   },
   tychy: {
     id: "tychy",
-    code: "TYCHY",
+    code: "TYSCY",
     name: "GKS Tychy",
     sportsdbId: "138917",
     leagueCode: "2L",
