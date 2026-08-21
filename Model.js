@@ -344,7 +344,8 @@ function shortName(value, club) {
   var folded = foldName(value)
   if (SHORT_NAMES[folded]) return SHORT_NAMES[folded]
   var text = String(value || "").replace(/^\s+|\s+$/g, "")
-  if (text.length <= 16) return text
+  if (/\b(ii|iii|2|3)\b/.test(folded)) return text
+  if (text.length <= 18) return text
   var parts = text.split(/\s+/)
   return parts[parts.length - 1] || text
 }
@@ -977,12 +978,17 @@ function resultForUs(event) {
   return "R"
 }
 
+function opponentLabel(value, club) {
+  if (isWidzew(value) || foldName(value) === "mezdim") return "Mezdim"
+  return displayName(String(value || "").replace(/^\s+|\s+$/g, ""))
+}
+
 function barLabel(snapshot, nowMs, includeFriendlies, lang, club) {
   club = club || clubById(snapshot && snapshot.club)
   var next = pickNext(snapshot && snapshot.events, nowMs, includeFriendlies)
   if (!next) return club.code
-  if (next.status === "live") return scoreline(next) + " " + shortName(next.opponent, club)
-  return "vs " + shortName(next.opponent, club) + " · " + formatWhen(next.kickoffMs, nowMs, lang)
+  if (next.status === "live") return scoreline(next) + " " + opponentLabel(next.opponent, club)
+  return "vs " + opponentLabel(next.opponent, club) + " · " + formatWhen(next.kickoffMs, nowMs, lang)
 }
 
 function barLabelVertical(snapshot, nowMs, includeFriendlies, club) {

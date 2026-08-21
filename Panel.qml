@@ -414,6 +414,7 @@ Panel {
                 fontFamily: root.contentFontFamily
                 fontSize: 26
                 fontBold: true
+                wrap: true
                 elideWidth: Style.space(280)
                 onMezdimEntered: root.playMezdimTune()
                 onMezdimExited: root.releaseMezdimTune()
@@ -490,6 +491,7 @@ Panel {
               fontFamily: root.contentFontFamily
               fontSize: Style.font.title
               fontBold: true
+              wrap: true
               elideWidth: parent.width - Style.space(32)
               onMezdimEntered: root.playMezdimTune()
               onMezdimExited: root.releaseMezdimTune()

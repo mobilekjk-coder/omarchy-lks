@@ -10,9 +10,10 @@ Row {
   property int fontSize: 12
   property bool fontBold: false
   property int elideWidth: -1
+  property bool wrap: false
 
   width: elideWidth > 0 ? elideWidth : implicitWidth
-  clip: elideWidth > 0
+  clip: false
 
   signal mezdimEntered()
   signal mezdimExited()
@@ -37,8 +38,10 @@ Row {
     return out
   }
 
+  readonly property var segments: root.partsOf(root.text)
+
   Repeater {
-    model: root.partsOf(root.text)
+    model: root.segments
 
     Text {
       required property var modelData
@@ -48,6 +51,13 @@ Row {
       font.pixelSize: root.fontSize
       font.bold: root.fontBold
       font.underline: hover.containsMouse && modelData.hot
+      width: {
+        if (root.wrap && root.segments.length === 1) return root.width
+        if (!root.wrap && root.elideWidth > 0 && root.segments.length === 1) return root.width
+        return implicitWidth
+      }
+      wrapMode: root.wrap ? Text.Wrap : Text.NoWrap
+      elide: (!root.wrap && root.elideWidth > 0 && root.segments.length === 1) ? Text.ElideRight : Text.ElideNone
 
       MouseArea {
         id: hover
