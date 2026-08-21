@@ -48,12 +48,24 @@ CLUBS = {
         "sportsdb_id": "134010",
         "league_id": "4422",
         "sources": {
+            "lechpoznan": {
+                "label": "lechpoznan.pl",
+                "kind": "lechpoznan",
+                "url": "https://www.lechpoznan.pl/terminarz/",
+            },
             "ekstraklasa": {
                 "label": "ekstraklasa.org",
                 "kind": "ekstraklasa",
                 "url": "https://ekstraklasa.org/kluby/lech-poznan/",
             },
-            "thesportsdb": {"label": "TheSportsDB"},
+            "thesportsdb": {
+                "label": "TheSportsDB",
+                "event_searches": [
+                    "Thun_vs_Lech_Poznan",
+                    "Lech_Poznan_vs_Thun",
+                    "FC_Thun_vs_Lech_Poznan",
+                ],
+            },
         },
     },
     "tychy": {
@@ -203,6 +215,46 @@ def fetch_ekstraklasa(url: str) -> dict:
     return {"fixtures": parse_ekstraklasa_html(get_html(url))}
 
 
+def parse_lechpoznan_html(html: str) -> list:
+    chunk = html
+    start = html.find("nextMatches-Slider")
+    if start >= 0:
+        chunk = html[start:start + 40000]
+    fixtures = []
+    for block in re.split(r"<li\b", chunk)[1:]:
+        title_m = re.search(r'data-title="([^"]*)"', block)
+        if not title_m:
+            continue
+        body = block
+        title = re.sub(r"<[^>]+>", " ", title_m.group(1))
+        title = re.sub(r"\s+", " ", title).strip()
+        date_m = re.search(r"(\d{2})\.(\d{2})\.(\d{4})(?:\s+\S+\s+(\d{1,2}):(\d{2}))?", title)
+        if not date_m:
+            continue
+        day = date_m.group(3) + "-" + date_m.group(2) + "-" + date_m.group(1)
+        clock = "20:00"
+        if date_m.group(4):
+            clock = date_m.group(4).zfill(2) + ":" + date_m.group(5)
+        competition = title[: date_m.start()].strip() or "Liga Europy"
+        home_m = re.search(r'class="Left"[\s\S]*?<u>([^<]+)</u>', body)
+        away_m = re.search(r'class="Right"[\s\S]*?<u>([^<]+)</u>', body)
+        if not home_m or not away_m:
+            continue
+        fixtures.append({
+            "home": home_m.group(1).strip(),
+            "away": away_m.group(1).strip(),
+            "round": "",
+            "kickoff": day + " " + clock + ":00",
+            "status": "scheduled",
+            "competition": competition,
+        })
+    return fixtures
+
+
+def fetch_lechpoznan(url: str) -> dict:
+    return {"fixtures": parse_lechpoznan_html(get_html(url))}
+
+
 def parse_drugaliga_fixtures(html: str) -> list:
     fixtures = []
     for block in html.split("timetable-item-date")[1:]:
@@ -297,6 +349,8 @@ def fetch_source(club_id: str, section_id: str, source_id: str) -> dict:
         payloads = {"liga": fetch_1liga(source["url"])}
     elif kind == "ekstraklasa":
         payloads = {"ekstraklasa": fetch_ekstraklasa(source["url"])}
+    elif kind == "lechpoznan":
+        payloads = {"lechpoznan": fetch_lechpoznan(source["url"])}
     elif kind == "drugaliga":
         payloads = {"drugaliga": fetch_drugaliga(source)}
     elif source_id == "thesportsdb":
@@ -373,6 +427,10 @@ def usable(bundle: dict) -> bool:
     if source in ("ekstraklasa", "merged"):
         eks = payloads.get("ekstraklasa") or {}
         if eks.get("fixtures"):
+            return True
+    if source in ("lechpoznan", "merged"):
+        club_site = payloads.get("lechpoznan") or {}
+        if club_site.get("fixtures"):
             return True
     if source in ("drugaliga", "merged"):
         liga2 = payloads.get("drugaliga") or {}

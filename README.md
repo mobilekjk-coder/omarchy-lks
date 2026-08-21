@@ -60,7 +60,7 @@ The panel, bar label, and notifications follow that language. `auto` uses Polish
 `auto` picks sources per club:
 
 - ŁKS — [lkslodz.pl](https://lkslodz.pl/) + [1liga.org](https://www.1liga.org/lks) + [TheSportsDB](https://www.thesportsdb.com/)
-- Lech — [ekstraklasa.org](https://ekstraklasa.org/kluby/lech-poznan/) + TheSportsDB (Europa / cup)
+- Lech — [lechpoznan.pl](https://www.lechpoznan.pl/terminarz/) + [ekstraklasa.org](https://ekstraklasa.org/kluby/lech-poznan/) + TheSportsDB
 - GKS Tychy and Zawisza — [drugaliga.org](https://www.drugaliga.org/) + TheSportsDB
 
 ## Data sources

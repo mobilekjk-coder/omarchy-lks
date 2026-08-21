@@ -443,11 +443,19 @@ function eventRank(event) {
   if (event.status === "finished") rank += 3
   if (event.status === "scheduled" || event.status === "live") rank += 1
   if (event.homeScore !== null) rank += 1
+  if (event.source === "lechpoznan") rank += 5
+  if (event.source === "ekstraklasa" || event.source === "lkslodz") rank += 3
   return rank
 }
 
+function opponentKey(value) {
+  var folded = foldName(value)
+  return folded.replace(/^(fc|cf|ks|kks|rts|gks|mks|sks|lks) /, "")
+}
+
 function eventKey(event) {
-  return [startOfDay(event.kickoffMs), foldName(event.home), foldName(event.away)].join("|")
+  var side = event.isHome ? "H" : "A"
+  return [startOfDay(event.kickoffMs), side, opponentKey(event.opponent)].join("|")
 }
 
 function dedupeEvents(events) {
@@ -787,6 +795,7 @@ function parseBundle(bundle, nowMs) {
   if (payloads.next || payloads.last || payloads.cup) events = events.concat(parseSportsDbEvents(payloads, nowMs, club))
   if (payloads.ekstraklasa) events = events.concat(parseListedEvents(payloads.ekstraklasa, club, nowMs, "ekstraklasa"))
   if (payloads.drugaliga) events = events.concat(parseListedEvents(payloads.drugaliga, club, nowMs, "drugaliga"))
+  if (payloads.lechpoznan) events = events.concat(parseListedEvents(payloads.lechpoznan, club, nowMs, "lechpoznan"))
   snapshot.events = dedupeEvents(events)
   snapshot.table = parseClubTable(payloads.table, club)
   if (!snapshot.table.length && payloads.drugaliga && payloads.drugaliga.table)
