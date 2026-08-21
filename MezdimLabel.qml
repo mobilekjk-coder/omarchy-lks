@@ -15,6 +15,7 @@ Row {
   clip: elideWidth > 0
 
   signal mezdimEntered()
+  signal mezdimExited()
 
   function partsOf(value) {
     var s = String(value || "")
@@ -55,6 +56,7 @@ Row {
         hoverEnabled: modelData.hot
         cursorShape: modelData.hot ? Qt.PointingHandCursor : Qt.ArrowCursor
         onEntered: root.mezdimEntered()
+        onExited: root.mezdimExited()
       }
     }
   }

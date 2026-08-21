@@ -155,10 +155,22 @@ Panel {
     return root.contentForeground
   }
 
-  function playMezdimTune() {
+  property bool mezdimWanted: false
+
+  function startMezdimTune() {
     if (mezdimProc.running) return
-    mezdimProc.command = ["paplay", root.pluginDir + "/mezdim.wav"]
+    mezdimProc.command = ["python3", root.pluginDir + "/play-mezdim.py", root.pluginDir + "/mezdim.ogg"]
     mezdimProc.running = true
+  }
+
+  function playMezdimTune() {
+    root.mezdimWanted = true
+    mezdimLeaveTimer.stop()
+    root.startMezdimTune()
+  }
+
+  function releaseMezdimTune() {
+    mezdimLeaveTimer.restart()
   }
 
   SystemClock {
@@ -183,8 +195,22 @@ Panel {
     command: ["mkdir", "-p", Quickshell.env("HOME") + "/.local/state/omarchy/kjk.lks"]
   }
 
+  Timer {
+    id: mezdimLeaveTimer
+    interval: 90
+    repeat: false
+    onTriggered: {
+      root.mezdimWanted = false
+      if (mezdimProc.running) mezdimProc.running = false
+    }
+  }
+
   Process {
     id: mezdimProc
+    onExited: function(exitCode) {
+      if (root.mezdimWanted && exitCode !== 0)
+        Qt.callLater(root.startMezdimTune)
+    }
   }
 
   Process {
@@ -390,6 +416,7 @@ Panel {
                 fontBold: true
                 elideWidth: Style.space(280)
                 onMezdimEntered: root.playMezdimTune()
+                onMezdimExited: root.releaseMezdimTune()
               }
 
               Text {
@@ -465,6 +492,7 @@ Panel {
               fontBold: true
               elideWidth: parent.width - Style.space(32)
               onMezdimEntered: root.playMezdimTune()
+              onMezdimExited: root.releaseMezdimTune()
             }
 
             Text {
@@ -523,6 +551,7 @@ Panel {
                 anchors.verticalCenter: parent.verticalCenter
                 elideWidth: parent.width - Style.space(80)
                 onMezdimEntered: root.playMezdimTune()
+                onMezdimExited: root.releaseMezdimTune()
               }
             }
           }
@@ -559,6 +588,7 @@ Panel {
                 fontFamily: root.contentFontFamily
                 fontSize: Style.font.bodySmall
                 onMezdimEntered: root.playMezdimTune()
+                onMezdimExited: root.releaseMezdimTune()
               }
             }
           }
@@ -619,6 +649,7 @@ Panel {
                     fontBold: modelData.isUs
                     anchors.verticalCenter: parent.verticalCenter
                     onMezdimEntered: root.playMezdimTune()
+                    onMezdimExited: root.releaseMezdimTune()
                   }
 
                   Text {

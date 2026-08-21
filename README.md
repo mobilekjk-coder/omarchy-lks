@@ -53,7 +53,7 @@ omarchy bar set kjk.lks club lech
 omarchy bar set kjk.lks refreshMinutes 10
 ```
 
-Hover the word **Mezdim** in the panel to play the opening of [Hava Nagila](https://commons.wikimedia.org/wiki/File:Hava_nagila.ogg) (`mezdim.wav`). That recording is public domain (Abraham Zevi Idelsohn, 1915, via Wikimedia Commons). Drop another wav there with the same name if you want a different clip.
+Hover the word **Mezdim** in the panel to play [Hava Nagila](https://commons.wikimedia.org/wiki/File:Hava_nagila.ogg) in full (`mezdim.ogg`). Move the pointer away and it fades out. That recording is public domain (Abraham Zevi Idelsohn, 1915, via Wikimedia Commons).
 
 The panel, bar label, and notifications follow that language. `auto` uses Polish when the desktop locale is Polish, otherwise English. Tap **PL** / **EN** in the panel header to switch. Tap **ŁKS · LECH · TYCHY · ZAW** to switch club.
 
