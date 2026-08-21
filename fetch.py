@@ -9,6 +9,7 @@ import argparse
 import json
 import re
 import sys
+import time
 import urllib.error
 import urllib.request
 from datetime import datetime, timezone
@@ -102,10 +103,19 @@ CLUBS = {
 
 
 def get_json(url: str) -> object:
-    req = urllib.request.Request(url, headers={"User-Agent": UA, "Accept": "application/json"})
-    with urllib.request.urlopen(req, timeout=15) as resp:
-        raw = resp.read().decode("utf-8", "replace")
-    return json.loads(raw)
+    last_error = None
+    for attempt in range(3):
+        req = urllib.request.Request(url, headers={"User-Agent": UA, "Accept": "application/json"})
+        try:
+            with urllib.request.urlopen(req, timeout=15) as resp:
+                raw = resp.read().decode("utf-8", "replace")
+            return json.loads(raw)
+        except urllib.error.HTTPError as exc:
+            last_error = exc
+            if exc.code != 429 or attempt == 2:
+                raise
+            time.sleep(1.2 * (attempt + 1))
+    raise last_error
 
 
 def get_html(url: str) -> str:

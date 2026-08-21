@@ -697,6 +697,22 @@ var KICKOFF_CORRECTIONS = [
   }
 ]
 
+// Finished European ties the club slider and Ekstraklasa feed omit.
+var RESULT_CORRECTIONS = [
+  {
+    club: "lech",
+    opponent: "thun",
+    competition: "Liga Europy",
+    kickoff: "2026-08-20 20:00:00",
+    home: "Lech Poznań",
+    away: "FC Thun",
+    isHome: true,
+    homeScore: 7,
+    awayScore: 0,
+    venue: "Enea Stadion"
+  }
+]
+
 function teamsLooselyMatch(a, b) {
   var fa = foldName(a)
   var fb = foldName(b)
@@ -753,6 +769,49 @@ function applyLeagueSchedule(events, fixtures) {
   return list
 }
 
+function applyResultCorrections(events, club) {
+  club = club || CLUBS.lks
+  var list = events || []
+  for (var j = 0; j < RESULT_CORRECTIONS.length; j++) {
+    var fix = RESULT_CORRECTIONS[j]
+    if (fix.club && fix.club !== club.id) continue
+    var kickoffMs = parseLocalDateTime(fix.kickoff)
+    var hit = null
+    for (var i = 0; i < list.length; i++) {
+      var event = list[i]
+      if (opponentKey(event.opponent) !== opponentKey(fix.opponent) && opponentKey(event.away) !== opponentKey(fix.away))
+        continue
+      if (kickoffMs && event.kickoffMs && startOfDay(event.kickoffMs) !== startOfDay(kickoffMs)) continue
+      hit = event
+      break
+    }
+    if (hit) {
+      hit.homeScore = fix.homeScore
+      hit.awayScore = fix.awayScore
+      hit.status = "finished"
+      if (fix.venue) hit.venue = fix.venue
+      if (fix.competition) hit.competition = fix.competition
+      continue
+    }
+    var built = buildEvent({
+      id: "correction:" + club.id + ":" + opponentKey(fix.opponent) + ":" + (fix.kickoff || j),
+      source: "manual-correction",
+      competition: fix.competition || "",
+      round: "",
+      kickoffMs: kickoffMs,
+      home: fix.home,
+      away: fix.away,
+      homeScore: fix.homeScore,
+      awayScore: fix.awayScore,
+      status: "finished",
+      venue: fix.venue || "",
+      isHome: !!fix.isHome
+    })
+    if (built) list.push(built)
+  }
+  return list
+}
+
 function applyKickoffCorrections(events, clubId) {
   var list = events || []
   var wanted = clubId || DEFAULT_CLUB
@@ -803,6 +862,7 @@ function parseBundle(bundle, nowMs) {
   if (!snapshot.table.length) snapshot.table = parseSportsDbTable(payloads.table, club)
   snapshot.events = applyLeagueSchedule(snapshot.events, parseLigaFixtures(payloads.liga, club))
   snapshot.events = applyKickoffCorrections(snapshot.events, club.id)
+  snapshot.events = applyResultCorrections(snapshot.events, club)
   snapshot.ok = snapshot.events.length > 0 || snapshot.table.length > 0
   if (!snapshot.ok) snapshot.error = bundle.error || "no events"
   return snapshot
@@ -831,6 +891,7 @@ function parseCache(raw, nowMs) {
     if (data.events || data.table) {
       data.club = resolveClubId(data.club)
       data.events = applyKickoffCorrections(data.events || [], data.club)
+      data.events = applyResultCorrections(data.events || [], clubById(data.club))
       data.ok = !!(data.events && data.events.length) || !!(data.table && data.table.length)
       return nickSnapshot(data)
     }
