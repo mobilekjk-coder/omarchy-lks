@@ -602,7 +602,7 @@ Panel {
 
                   Text {
                     width: parent.width - Style.space(80)
-                    text: modelData.isUs ? "ŁKS Łódź" : modelData.name
+                    text: Model.displayName(modelData.isUs ? root.club.name : modelData.name)
                     color: root.contentForeground
                     font.family: root.contentFontFamily
                     font.pixelSize: Style.font.bodySmall

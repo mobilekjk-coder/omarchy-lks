@@ -201,7 +201,7 @@ var SHORT_NAMES = {
   "pogon szczecin": "Pogoń",
   "motor lublin": "Motor",
   "cracovia": "Cracovia",
-  "widzew lodz": "Widzew",
+  "widzew lodz": "Mezdim",
   "zawisza bydgoszcz": "Zawisza"
 }
 
@@ -259,6 +259,15 @@ function foldName(value) {
 
 function compactName(value) {
   return foldName(value).replace(/\s+/g, "")
+}
+
+function isWidzew(value) {
+  return /widzew/.test(foldName(value))
+}
+
+function displayName(value) {
+  if (isWidzew(value)) return "Mezdim"
+  return String(value || "")
 }
 
 function isClubName(value, club) {
@@ -329,6 +338,7 @@ function isLksSide(side, name) {
 }
 
 function shortName(value, club) {
+  if (isWidzew(value) || foldName(value) === "mezdim") return "Mezdim"
   if (club && isClubName(value, club)) return club.code
   if (isLksName(value)) return "ŁKS"
   var folded = foldName(value)
@@ -459,8 +469,8 @@ function dedupeEvents(events) {
 }
 
 function buildEvent(fields) {
-  var home = fields.home || ""
-  var away = fields.away || ""
+  var home = displayName(fields.home || "")
+  var away = displayName(fields.away || "")
   var isHome = !!fields.isHome
   var opponent = isHome ? away : home
   if (!opponent) return null
@@ -527,7 +537,7 @@ function parseClubTable(raw, club) {
     var goals = String(row.goals || "").split(":")
     table.push({
       position: parseInt(row.position, 10) || (i + 1),
-      name: row.name || "",
+      name: displayName(row.name || ""),
       played: parseInt(row.played, 10) || 0,
       wins: parseInt(row.wins, 10) || 0,
       draws: parseInt(row.draws, 10) || 0,
@@ -613,7 +623,7 @@ function parseSportsDbTable(raw, club) {
     var row = payload[i] || {}
     table.push({
       position: parseInt(row.intRank, 10) || (i + 1),
-      name: row.strTeam || "",
+      name: displayName(row.strTeam || ""),
       played: parseInt(row.intPlayed, 10) || 0,
       wins: parseInt(row.intWin, 10) || 0,
       draws: parseInt(row.intDraw, 10) || 0,
@@ -683,6 +693,7 @@ function teamsLooselyMatch(a, b) {
   var fb = foldName(b)
   if (!fa || !fb) return false
   if (fa === fb) return true
+  if ((isWidzew(a) || fa === "mezdim") && (isWidzew(b) || fb === "mezdim")) return true
   if (fa.indexOf(fb) === 0 || fb.indexOf(fa) === 0) return true
   return false
 }
@@ -787,6 +798,22 @@ function parseBundle(bundle, nowMs) {
   return snapshot
 }
 
+function nickSnapshot(data) {
+  var events = data.events || []
+  for (var i = 0; i < events.length; i++) {
+    var event = events[i]
+    if (!event) continue
+    event.home = displayName(event.home)
+    event.away = displayName(event.away)
+    event.opponent = event.isHome ? event.away : event.home
+  }
+  var table = data.table || []
+  for (var j = 0; j < table.length; j++) {
+    if (table[j]) table[j].name = displayName(table[j].name)
+  }
+  return data
+}
+
 function parseCache(raw, nowMs) {
   try {
     var data = JSON.parse(String(raw || ""))
@@ -795,7 +822,7 @@ function parseCache(raw, nowMs) {
       data.club = resolveClubId(data.club)
       data.events = applyKickoffCorrections(data.events || [], data.club)
       data.ok = !!(data.events && data.events.length) || !!(data.table && data.table.length)
-      return data
+      return nickSnapshot(data)
     }
     return parseBundle(data, nowMs || Date.now())
   } catch (e) {
@@ -1087,6 +1114,7 @@ if (typeof module !== "undefined") {
     clubIds: clubIds,
     emptySnapshot: emptySnapshot,
     foldName: foldName,
+    displayName: displayName,
     isLksName: isLksName,
     isLksFirstTeam: isLksFirstTeam,
     sideName: sideName,

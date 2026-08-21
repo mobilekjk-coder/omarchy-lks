@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "kjk.lks",
   "name": "ŁKS",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "author": "Krzysztof Janusz Kowalczykowski",
   "license": "MIT",
   "description": "ŁKS Łódź match calendar. Starts with the men's first football team; sources are swappable per section.",
