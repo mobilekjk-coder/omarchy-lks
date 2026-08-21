@@ -397,6 +397,8 @@ Panel {
               id: heroLeft
               anchors.left: parent.left
               anchors.leftMargin: Style.space(16)
+              anchors.right: heroRight.left
+              anchors.rightMargin: Style.space(16)
               anchors.verticalCenter: parent.verticalCenter
               spacing: Style.space(4)
 
@@ -409,13 +411,13 @@ Panel {
               }
 
               MezdimLabel {
+                width: parent.width
                 text: root.nextEvent ? ("vs " + root.nextEvent.opponent) : Model.t(root.lang, "noFixture")
                 color: root.contentForeground
                 fontFamily: root.contentFontFamily
                 fontSize: 26
                 fontBold: true
-                wrap: true
-                elideWidth: Style.space(280)
+                fit: true
                 onMezdimEntered: root.playMezdimTune()
                 onMezdimExited: root.releaseMezdimTune()
               }
@@ -491,7 +493,7 @@ Panel {
               fontFamily: root.contentFontFamily
               fontSize: Style.font.title
               fontBold: true
-              wrap: true
+              fit: true
               elideWidth: parent.width - Style.space(32)
               onMezdimEntered: root.playMezdimTune()
               onMezdimExited: root.releaseMezdimTune()
