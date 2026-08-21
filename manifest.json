@@ -2,10 +2,10 @@
   "schemaVersion": 1,
   "id": "kjk.lks",
   "name": "ŁKS",
-  "version": "0.3.6",
+  "version": "0.3.7",
   "author": "Krzysztof Janusz Kowalczykowski",
   "license": "MIT",
-  "description": "ŁKS Łódź match calendar. Starts with the men's first football team; sources are swappable per section.",
+  "description": "Match calendar for ŁKS Łódź, Lech Poznań, GKS Tychy, and Zawisza Bydgoszcz. Next match, last result, upcoming fixtures, and league table. Switch club and language from the panel.",
   "kinds": [
     "bar-widget"
   ],
@@ -14,7 +14,7 @@
   },
   "barWidget": {
     "displayName": "ŁKS",
-    "description": "Next ŁKS match, recent result, and league table",
+    "description": "Next match, result, and table for ŁKS, Lech, Tychy, and Zawisza",
     "category": "Info",
     "allowMultiple": false,
     "defaultSection": "center",
