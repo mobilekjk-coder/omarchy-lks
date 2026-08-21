@@ -155,6 +155,12 @@ Panel {
     return root.contentForeground
   }
 
+  function playMezdimTune() {
+    if (mezdimProc.running) return
+    mezdimProc.command = ["paplay", root.pluginDir + "/mezdim.wav"]
+    mezdimProc.running = true
+  }
+
   SystemClock {
     id: clock
     precision: SystemClock.Minutes
@@ -175,6 +181,10 @@ Panel {
   Process {
     id: mkdirProc
     command: ["mkdir", "-p", Quickshell.env("HOME") + "/.local/state/omarchy/kjk.lks"]
+  }
+
+  Process {
+    id: mezdimProc
   }
 
   Process {
@@ -372,14 +382,14 @@ Panel {
                 font.letterSpacing: 1
               }
 
-              Text {
+              MezdimLabel {
                 text: root.nextEvent ? ("vs " + root.nextEvent.opponent) : Model.t(root.lang, "noFixture")
                 color: root.contentForeground
-                font.family: root.contentFontFamily
-                font.pixelSize: 26
-                font.bold: true
-                width: Style.space(280)
-                wrapMode: Text.WordWrap
+                fontFamily: root.contentFontFamily
+                fontSize: 26
+                fontBold: true
+                elideWidth: Style.space(280)
+                onMezdimEntered: root.playMezdimTune()
               }
 
               Text {
@@ -447,14 +457,14 @@ Panel {
               fontFamily: root.contentFontFamily
             }
 
-            Text {
+            MezdimLabel {
               text: root.nextCup ? ((root.nextCup.isHome ? "" : "@ ") + root.nextCup.opponent) : ""
               color: root.contentForeground
-              font.family: root.contentFontFamily
-              font.pixelSize: Style.font.title
-              font.bold: true
-              width: parent.width - Style.space(32)
-              wrapMode: Text.WordWrap
+              fontFamily: root.contentFontFamily
+              fontSize: Style.font.title
+              fontBold: true
+              elideWidth: parent.width - Style.space(32)
+              onMezdimEntered: root.playMezdimTune()
             }
 
             Text {
@@ -505,14 +515,14 @@ Panel {
                 font.bold: true
               }
 
-              Text {
+              MezdimLabel {
                 text: root.lastEvent ? ((root.lastEvent.isHome ? "" : "@ ") + root.lastEvent.opponent) : ""
                 color: root.contentForeground
-                font.family: root.contentFontFamily
-                font.pixelSize: Style.font.body
+                fontFamily: root.contentFontFamily
+                fontSize: Style.font.body
                 anchors.verticalCenter: parent.verticalCenter
-                width: parent.width - Style.space(80)
-                elide: Text.ElideRight
+                elideWidth: parent.width - Style.space(80)
+                onMezdimEntered: root.playMezdimTune()
               }
             }
           }
@@ -541,14 +551,14 @@ Panel {
             Repeater {
               model: root.laterEvents
 
-              Text {
+              MezdimLabel {
                 required property var modelData
-                width: bodyColumn.width - Style.space(32)
+                elideWidth: bodyColumn.width - Style.space(32)
                 text: Model.upcomingLine(modelData, root.lang, root.club)
                 color: root.contentForeground
-                font.family: root.contentFontFamily
-                font.pixelSize: Style.font.bodySmall
-                elide: Text.ElideRight
+                fontFamily: root.contentFontFamily
+                fontSize: Style.font.bodySmall
+                onMezdimEntered: root.playMezdimTune()
               }
             }
           }
@@ -600,15 +610,15 @@ Panel {
                     anchors.verticalCenter: parent.verticalCenter
                   }
 
-                  Text {
-                    width: parent.width - Style.space(80)
+                  MezdimLabel {
+                    elideWidth: parent.width - Style.space(80)
                     text: Model.displayName(modelData.isUs ? root.club.name : modelData.name)
                     color: root.contentForeground
-                    font.family: root.contentFontFamily
-                    font.pixelSize: Style.font.bodySmall
-                    font.bold: modelData.isUs
-                    elide: Text.ElideRight
+                    fontFamily: root.contentFontFamily
+                    fontSize: Style.font.bodySmall
+                    fontBold: modelData.isUs
                     anchors.verticalCenter: parent.verticalCenter
+                    onMezdimEntered: root.playMezdimTune()
                   }
 
                   Text {
