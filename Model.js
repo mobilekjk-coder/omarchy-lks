@@ -50,7 +50,7 @@ var CLUBS = {
   },
   zawisza: {
     id: "zawisza",
-    code: "ZAW",
+    code: "ZETKA",
     name: "Zawisza Bydgoszcz",
     sportsdbId: "134612",
     leagueCode: "2L",
