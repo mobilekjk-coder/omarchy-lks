@@ -592,7 +592,7 @@ function parseSportsDbEvent(row, sourceKey, nowMs, club) {
     id: "thesportsdb:" + String(row.idEvent || sourceKey),
     source: "thesportsdb",
     competition: row.strLeague || "",
-    round: String(row.intRound || ""),
+    round: usableRound(row.intRound, competitionKind(row.strLeague || "")),
     kickoffMs: kickoffMs,
     home: homeIsUs ? club.name : home,
     away: awayIsUs ? club.name : away,
@@ -1033,19 +1033,36 @@ function upcomingLine(event, lang, club) {
   return when + "   " + comp + "  " + venue + "  " + event.opponent
 }
 
+function usableRound(raw, kind) {
+  var s = String(raw || "").replace(/^\s+|\s+$/g, "")
+  if (!s) return ""
+  var n = parseInt(s, 10)
+  if (isNaN(n)) return s
+  if (kind === "europe") return ""
+  if (kind === "cup") {
+    if (n === 64 || n === 32 || n === 16 || n === 8 || n === 4 || n === 2) return String(n)
+    return ""
+  }
+  if (n >= 1 && n <= 38) return String(n)
+  return ""
+}
+
 function displayRound(event, lang) {
-  if (!event || !event.round) return ""
-  if (event.competitionKind === "cup") {
-    var n = parseInt(event.round, 10)
+  if (!event) return ""
+  var kind = event.competitionKind || competitionKind(event.competition)
+  var round = usableRound(event.round, kind)
+  if (!round) return ""
+  if (kind === "cup") {
+    var n = parseInt(round, 10)
     if (n === 64) return lang === "pl" ? "1. runda" : "1st round"
     if (n === 32) return lang === "pl" ? "1/16 finału" : "round of 32"
     if (n === 16) return lang === "pl" ? "1/8 finału" : "round of 16"
     if (n === 8) return lang === "pl" ? "ćwierćfinał" : "quarter-final"
     if (n === 4) return lang === "pl" ? "półfinał" : "semi-final"
     if (n === 2) return lang === "pl" ? "finał" : "final"
-    return t(lang, "round") + " " + event.round
+    return t(lang, "round") + " " + round
   }
-  return t(lang, "matchday") + " " + event.round
+  return t(lang, "matchday") + " " + round
 }
 
 function competitionLine(event, lang) {
