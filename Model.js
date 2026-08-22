@@ -93,6 +93,7 @@ var STRINGS = {
     "pts": "pkt",
     "today": "dziś",
     "tomorrow": "jutro",
+    "broadcast": "TVP Sport",
     "source": "Źródło",
     "loading": "Pobieranie terminów…",
     "noMatch": "Brak zaplanowanego meczu",
@@ -122,6 +123,7 @@ var STRINGS = {
     "pts": "pts",
     "today": "today",
     "tomorrow": "tomorrow",
+    "broadcast": "TVP Sport",
     "source": "Source",
     "loading": "Loading fixtures…",
     "noMatch": "No upcoming match",
@@ -769,6 +771,50 @@ function applyLeagueSchedule(events, fixtures) {
   return list
 }
 
+function titleHasName(titleFold, name) {
+  var folded = foldName(name)
+  if (!folded) return false
+  if (titleFold.indexOf(folded) !== -1) return true
+  var key = opponentKey(name)
+  return key.length >= 4 && titleFold.indexOf(key) !== -1
+}
+
+function attachBroadcasts(events, items, club) {
+  var list = events || []
+  var feeds = items || []
+  if (!feeds.length) return list
+  for (var i = 0; i < list.length; i++) {
+    var event = list[i]
+    if (!event || event.status === "finished") continue
+    var best = null
+    var bestDelta = null
+    for (var j = 0; j < feeds.length; j++) {
+      var item = feeds[j] || {}
+      var titleFold = foldName(item.title)
+      if (!titleHasName(titleFold, club && club.name) && !titleHasName(titleFold, club && club.code))
+        continue
+      if (!titleHasName(titleFold, event.opponent) && !titleHasName(titleFold, event.home) && !titleHasName(titleFold, event.away))
+        continue
+      var start = parseInt(item.broadcastStart, 10)
+      if (event.kickoffMs && !isNaN(start) && start > 0) {
+        if (startOfDay(start) !== startOfDay(event.kickoffMs)) continue
+        var delta = Math.abs(start - event.kickoffMs)
+        if (bestDelta === null || delta < bestDelta) {
+          best = item
+          bestDelta = delta
+        }
+      } else if (!best) {
+        best = item
+      }
+    }
+    if (best && best.url) {
+      event.broadcastUrl = best.url
+      event.broadcastLive = !!best.isLive
+    }
+  }
+  return list
+}
+
 function applyResultCorrections(events, club) {
   club = club || CLUBS.lks
   var list = events || []
@@ -863,6 +909,7 @@ function parseBundle(bundle, nowMs) {
   snapshot.events = applyLeagueSchedule(snapshot.events, parseLigaFixtures(payloads.liga, club))
   snapshot.events = applyKickoffCorrections(snapshot.events, club.id)
   snapshot.events = applyResultCorrections(snapshot.events, club)
+  snapshot.events = attachBroadcasts(snapshot.events, (payloads.tvp || {}).items, club)
   snapshot.ok = snapshot.events.length > 0 || snapshot.table.length > 0
   if (!snapshot.ok) snapshot.error = bundle.error || "no events"
   return snapshot

@@ -62,6 +62,7 @@ The panel, bar label, and notifications follow that language. `auto` uses Polish
 - ŁKS — [lkslodz.pl](https://lkslodz.pl/) + [1liga.org](https://www.1liga.org/lks) + [TheSportsDB](https://www.thesportsdb.com/)
 - Lech — [lechpoznan.pl](https://www.lechpoznan.pl/terminarz/) + [ekstraklasa.org](https://ekstraklasa.org/kluby/lech-poznan/) + TheSportsDB
 - GKS Tychy and Zawisza — [drugaliga.org](https://www.drugaliga.org/) + TheSportsDB
+- ŁKS, Tychy, and Zawisza — [TVP Sport transmissions](https://sport.tvp.pl/transmisje) when a stream is listed
 
 ## Data sources
 

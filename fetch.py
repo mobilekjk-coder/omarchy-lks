@@ -41,6 +41,7 @@ CLUBS = {
                 "label": "TheSportsDB",
                 "event_searches": ["GKS_Tychy_vs_LKS_Lodz", "LKS_Lodz_vs_GKS_Tychy"],
             },
+            "tvp": {"label": "sport.tvp.pl", "kind": "tvp"},
         },
     },
     "lech": {
@@ -82,6 +83,7 @@ CLUBS = {
                 "table_url": "https://www.drugaliga.org/tabela-2026/27",
             },
             "thesportsdb": {"label": "TheSportsDB"},
+            "tvp": {"label": "sport.tvp.pl", "kind": "tvp"},
         },
     },
     "zawisza": {
@@ -97,6 +99,7 @@ CLUBS = {
                 "table_url": "https://www.drugaliga.org/tabela-2026/27",
             },
             "thesportsdb": {"label": "TheSportsDB"},
+            "tvp": {"label": "sport.tvp.pl", "kind": "tvp"},
         },
     },
 }
@@ -341,6 +344,28 @@ def fetch_drugaliga(source: dict) -> dict:
     return {"fixtures": fixtures, "table": table}
 
 
+def fetch_tvp() -> dict:
+    data = get_json("https://sport.tvp.pl/api/sport/www/transmission?device=www")
+    items = ((data or {}).get("data") or {}).get("items") or []
+    out = []
+    for it in items:
+        title = str(it.get("title") or "")
+        video = it.get("video") if isinstance(it.get("video"), dict) else {}
+        news = it.get("news") if isinstance(it.get("news"), dict) else {}
+        url = str(video.get("url") or news.get("url") or "")
+        if not url:
+            continue
+        if "magazyn" in title.lower() or "styl życia" in title.lower() or "styl zycia" in title.lower():
+            continue
+        out.append({
+            "title": title,
+            "url": url,
+            "broadcastStart": it.get("broadcast_start"),
+            "isLive": bool(it.get("is_live")),
+        })
+    return {"items": out}
+
+
 def fetch_thesportsdb(club: dict, source: dict) -> dict:
     payloads = {}
     for name, url in sportsdb_urls(club).items():
@@ -363,6 +388,8 @@ def fetch_source(club_id: str, section_id: str, source_id: str) -> dict:
         payloads = {"lechpoznan": fetch_lechpoznan(source["url"])}
     elif kind == "drugaliga":
         payloads = {"drugaliga": fetch_drugaliga(source)}
+    elif kind == "tvp":
+        payloads = {"tvp": fetch_tvp()}
     elif source_id == "thesportsdb":
         payloads = fetch_thesportsdb(club, source)
     else:
@@ -441,6 +468,10 @@ def usable(bundle: dict) -> bool:
     if source in ("lechpoznan", "merged"):
         club_site = payloads.get("lechpoznan") or {}
         if club_site.get("fixtures"):
+            return True
+    if source in ("tvp", "merged"):
+        tvp = payloads.get("tvp") or {}
+        if tvp.get("items"):
             return True
     if source in ("drugaliga", "merged"):
         liga2 = payloads.get("drugaliga") or {}

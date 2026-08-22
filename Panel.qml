@@ -136,6 +136,17 @@ Panel {
     fetchProc.running = true
   }
 
+  function openBroadcast(url) {
+    if (!url) return
+    Qt.openUrlExternally(url)
+  }
+
+  function showBroadcastLink(event, isNext) {
+    if (!event || !event.broadcastUrl) return false
+    if (isNext) return true
+    return root.clubId === "tychy" || root.clubId === "zawisza"
+  }
+
   function notifyNext() {
     var event = root.nextEvent || root.lastEvent
     if (!root.bar) return
@@ -466,6 +477,24 @@ Panel {
             leftPadding: Style.space(16)
           }
 
+          Text {
+            visible: root.showBroadcastLink(root.nextEvent, true)
+            text: Model.t(root.lang, "broadcast")
+            color: Color.accent
+            font.family: root.contentFontFamily
+            font.pixelSize: Style.font.bodySmall
+            font.underline: true
+            leftPadding: Style.space(16)
+
+            MouseArea {
+              anchors.fill: parent
+              anchors.margins: -Style.space(4)
+              hoverEnabled: true
+              cursorShape: Qt.PointingHandCursor
+              onClicked: root.openBroadcast(root.nextEvent.broadcastUrl)
+            }
+          }
+
           Rectangle {
             visible: !!root.nextCup
             width: parent.width
@@ -584,15 +613,39 @@ Panel {
             Repeater {
               model: root.laterEvents
 
-              MezdimLabel {
+              Row {
                 required property var modelData
-                elideWidth: bodyColumn.width - Style.space(32)
-                text: Model.upcomingLine(modelData, root.lang, root.club)
-                color: root.contentForeground
-                fontFamily: root.contentFontFamily
-                fontSize: Style.font.bodySmall
-                onMezdimEntered: root.playMezdimTune()
-                onMezdimExited: root.releaseMezdimTune()
+                width: bodyColumn.width - Style.space(32)
+                spacing: Style.space(8)
+
+                MezdimLabel {
+                  elideWidth: parent.width - (tvpLink.visible ? tvpLink.implicitWidth + Style.space(8) : 0)
+                  text: Model.upcomingLine(modelData, root.lang, root.club)
+                  color: root.contentForeground
+                  fontFamily: root.contentFontFamily
+                  fontSize: Style.font.bodySmall
+                  onMezdimEntered: root.playMezdimTune()
+                  onMezdimExited: root.releaseMezdimTune()
+                }
+
+                Text {
+                  id: tvpLink
+                  visible: root.showBroadcastLink(modelData, false)
+                  text: Model.t(root.lang, "broadcast")
+                  color: Color.accent
+                  font.family: root.contentFontFamily
+                  font.pixelSize: Style.font.bodySmall
+                  font.underline: true
+                  anchors.verticalCenter: parent.verticalCenter
+
+                  MouseArea {
+                    anchors.fill: parent
+                    anchors.margins: -Style.space(4)
+                    hoverEnabled: true
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: root.openBroadcast(modelData.broadcastUrl)
+                  }
+                }
               }
             }
           }
