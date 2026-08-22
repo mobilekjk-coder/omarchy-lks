@@ -77,10 +77,6 @@ Kickoff times from Polish sites are treated as Europe/Warsaw, then shown in your
 
 Other club sections (volleyball, basketball, and so on) are not wired yet. The fetch layer is built so a new section is another source entry plus a parser.
 
-## Related
-
-A separate project, **Rycerze Wiosny Engine**, is the shared fixture repository this widget and future apps will pull from.
-
 ## License
 
 MIT. See [LICENSE](LICENSE).
