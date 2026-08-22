@@ -1,8 +1,8 @@
 {
   "schemaVersion": 1,
   "id": "kjk.lks",
-  "name": "ŁKS",
-  "version": "0.3.13",
+  "name": "ŁKS and friends",
+  "version": "0.3.14",
   "author": "Krzysztof Janusz Kowalczykowski",
   "license": "MIT",
   "description": "Match calendar for ŁKS Łódź, Lech Poznań, GKS Tychy, and Zawisza Bydgoszcz. Next match, last result, upcoming fixtures, and league table. Switch club and language from the panel.",
@@ -13,7 +13,7 @@
     "barWidget": "BarWidget.qml"
   },
   "barWidget": {
-    "displayName": "ŁKS",
+    "displayName": "ŁKS and friends",
     "description": "Next match, result, and table for ŁKS, Lech, Tychy, and Zawisza",
     "category": "Info",
     "allowMultiple": false,

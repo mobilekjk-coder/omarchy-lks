@@ -1,4 +1,4 @@
-# ŁKS — Omarchy plugin
+# ŁKS and friends — Omarchy plugin
 
 Bar widget for [ŁKS Łódź](https://lkslodz.pl/) and the friendly clubs: Lech Poznań, GKS Tychy, and Zawisza Bydgoszcz. Men's first football: next match, last result, upcoming fixtures, and the league table. Switch club and language from the panel header.
 
