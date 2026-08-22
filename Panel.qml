@@ -101,6 +101,15 @@ Panel {
     }
   }
 
+  function applyLiveOverlay(raw) {
+    var bundle = JSON.parse(String(raw || "{}"))
+    var next = Model.applyLiveOverlay(root.snapshot, bundle, Date.now())
+    if (next && next !== root.snapshot) {
+      root.snapshot = next
+      cacheFile.setText(JSON.stringify(next) + "\n")
+    }
+  }
+
   function persistSettings(patch) {
     var entry = { id: root.moduleName }
     for (var key in root.settings) if (key !== "id") entry[key] = root.settings[key]
@@ -129,10 +138,21 @@ Panel {
     persistLanguage(Model.otherLang(root.lang))
   }
 
-  function refresh() {
-    if (fetchProc.running) fetchProc.running = false
-    root.loading = true
-    fetchProc.command = ["python3", root.pluginDir + "/fetch.py", "--club", root.clubId, "--section", root.sectionId, "--source", root.sourcePref]
+  property bool liveFetch: false
+  property bool hasApiFootballKey: false
+
+  function refresh(quiet) {
+    var liveOnly = quiet === true
+    if (!liveOnly) apiKeyFile.reload()
+    if (fetchProc.running) {
+      if (liveOnly) return
+      fetchProc.running = false
+    }
+    root.liveFetch = liveOnly
+    if (!liveOnly) root.loading = true
+    var cmd = ["python3", root.pluginDir + "/fetch.py", "--club", root.clubId, "--section", root.sectionId, "--source", root.sourcePref]
+    if (liveOnly) cmd.push("--live")
+    fetchProc.command = cmd
     fetchProc.running = true
   }
 
@@ -236,9 +256,10 @@ Panel {
           return
         }
         try {
-          root.applyBundle(raw)
+          if (root.liveFetch) root.applyLiveOverlay(raw)
+          else root.applyBundle(raw)
         } catch (e) {
-          root.fetchError = "parse"
+          if (!root.liveFetch) root.fetchError = "parse"
         }
       }
     }
@@ -255,9 +276,31 @@ Panel {
     onTriggered: root.refresh()
   }
 
+  Timer {
+    interval: 90 * 1000
+    running: root.hasApiFootballKey && !!root.nextEvent && root.nextEvent.status === "live"
+    repeat: true
+    triggeredOnStart: true
+    onTriggered: {
+      if (root.loading || fetchProc.running) return
+      root.refresh(true)
+    }
+  }
+
+  FileView {
+    id: apiKeyFile
+    path: Quickshell.env("HOME") + "/.local/state/omarchy/kjk.lks/api-football.key"
+    watchChanges: true
+    printErrors: false
+    onLoaded: root.hasApiFootballKey = String(text() || "").replace(/^\s+|\s+$/g, "").length > 0
+  }
+
   Component.onCompleted: {
     mkdirProc.running = true
-    Qt.callLater(function() { cacheFile.reload() })
+    Qt.callLater(function() {
+      cacheFile.reload()
+      apiKeyFile.reload()
+    })
   }
 
   IpcHandler {
@@ -460,7 +503,9 @@ Panel {
 
               Text {
                 anchors.right: parent.right
-                text: root.nextEvent && root.nextEvent.status === "live" ? Model.t(root.lang, "liveShort") : Model.pointsLine(root.snapshot.table, root.lang)
+                text: root.nextEvent && root.nextEvent.status === "live"
+                  ? (root.nextEvent.elapsed ? (String(root.nextEvent.elapsed) + "'") : Model.t(root.lang, "liveShort"))
+                  : Model.pointsLine(root.snapshot.table, root.lang)
                 color: Qt.darker(root.contentForeground, 1.4)
                 font.family: root.contentFontFamily
                 font.pixelSize: Style.font.body

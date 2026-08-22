@@ -3,7 +3,7 @@
 // event: {
 //   id, source, section, competition, competitionKind, round,
 //   kickoffMs, home, away, homeScore, awayScore, status,
-//   venue, isHome, opponent
+//   venue, isHome, opponent, elapsed
 // }
 // status: scheduled | live | finished | postponed | cancelled
 // competitionKind: league | cup | friendly
@@ -425,17 +425,17 @@ function competitionKind(name) {
 
 function normalizeStatus(raw, homeScore, awayScore, kickoffMs, nowMs) {
   var status = String(raw || "").toLowerCase()
-  if (/postpon/.test(status)) return "postponed"
-  if (/cancel/.test(status)) return "cancelled"
-  if (status === "aet" || status === "pen" || /ended|finished|ft|aet|after extra/.test(status))
+  if (/postpon|pst|susp/.test(status)) return "postponed"
+  if (/cancel|canc|abd/.test(status)) return "cancelled"
+  if (status === "ft" || status === "aet" || status === "pen" || /ended|finished|after extra/.test(status))
     return "finished"
-  if (/live|1h|2h|ht|in play|halftime/.test(status)) return "live"
+  if (/live|1h|2h|ht|et|in play|halftime|break|^p$|^int$/.test(status)) return "live"
+  if (kickoffMs !== null && nowMs !== null) {
+    var elapsed = (nowMs - kickoffMs) / 1000
+    if (elapsed >= 0 && elapsed < 2.5 * 3600) return "live"
+  }
   var hasScore = homeScore !== null && awayScore !== null
   if (hasScore) return "finished"
-  if (kickoffMs !== null && nowMs !== null) {
-    var elapsed = nowMs - kickoffMs
-    if (elapsed >= 0 && elapsed < 2.5 * 60 * 60 * 1000) return "live"
-  }
   return "scheduled"
 }
 
@@ -445,6 +445,11 @@ function eventRank(event) {
   if (event.status === "finished") rank += 3
   if (event.status === "scheduled" || event.status === "live") rank += 1
   if (event.homeScore !== null) rank += 1
+  if (event.source === "apifootball") {
+    if (event.status === "live") rank += 8
+    else if (event.homeScore !== null) rank += 4
+    else rank += 1
+  }
   if (event.source === "lechpoznan") rank += 5
   if (event.source === "ekstraklasa" || event.source === "lkslodz") rank += 3
   return rank
@@ -500,7 +505,8 @@ function buildEvent(fields) {
     status: fields.status,
     venue: fields.venue || "",
     isHome: isHome,
-    opponent: opponent
+    opponent: opponent,
+    elapsed: fields.elapsed == null || isNaN(fields.elapsed) ? null : fields.elapsed
   }
 }
 
@@ -666,8 +672,9 @@ function parseListedEvents(raw, club, nowMs, sourceId) {
     if (kickoffMs === null) kickoffMs = parseLocalDateTime(row.kickoff)
     var homeScore = parseScore(row.homeScore)
     var awayScore = parseScore(row.awayScore)
+    var elapsed = parseScore(row.elapsed)
     var event = buildEvent({
-      id: (sourceId || "listed") + ":" + String(row.kickoff || i) + ":" + compactName(home) + ":" + compactName(away),
+      id: (sourceId || "listed") + ":" + String(row.fixtureId || row.kickoff || i) + ":" + compactName(home) + ":" + compactName(away),
       source: sourceId || "listed",
       competition: row.competition || "",
       round: String(row.round || ""),
@@ -678,7 +685,8 @@ function parseListedEvents(raw, club, nowMs, sourceId) {
       awayScore: awayScore,
       status: normalizeStatus(row.status, homeScore, awayScore, kickoffMs, nowMs),
       venue: row.venue || "",
-      isHome: homeIsUs
+      isHome: homeIsUs,
+      elapsed: elapsed
     })
     if (event) events.push(event)
   }
@@ -878,6 +886,58 @@ function applyKickoffCorrections(events, clubId) {
   return list
 }
 
+function copyEvent(event) {
+  if (!event) return event
+  var copy = {}
+  for (var key in event) copy[key] = event[key]
+  return copy
+}
+
+function applyLiveOverlay(snapshot, bundle, nowMs) {
+  if (!snapshot || typeof snapshot !== "object") return snapshot
+  if (!bundle || bundle.ok === false) return snapshot
+  var liveEvents = parseListedEvents((bundle.payloads || {}).apifootball, clubById(snapshot.club), nowMs, "apifootball")
+  if (!liveEvents.length) return snapshot
+  var events = []
+  var indexByKey = {}
+  for (var i = 0; i < (snapshot.events || []).length; i++) {
+    var existing = copyEvent(snapshot.events[i])
+    events.push(existing)
+    if (existing && existing.kickoffMs !== null && existing.opponent)
+      indexByKey[eventKey(existing)] = events.length - 1
+  }
+  var changed = false
+  for (var j = 0; j < liveEvents.length; j++) {
+    var live = liveEvents[j]
+    if (!live) continue
+    var key = eventKey(live)
+    if (indexByKey[key] !== undefined) {
+      var target = events[indexByKey[key]]
+      target.homeScore = live.homeScore
+      target.awayScore = live.awayScore
+      target.status = live.status
+      target.elapsed = live.elapsed
+      changed = true
+    } else if (live.status === "live" || live.status === "finished") {
+      events.push(live)
+      indexByKey[key] = events.length - 1
+      changed = true
+    }
+  }
+  if (!changed) return snapshot
+  return nickSnapshot({
+    ok: true,
+    club: snapshot.club,
+    section: snapshot.section,
+    source: snapshot.source,
+    sourceLabel: snapshot.sourceLabel,
+    fetchedAt: nowMs || snapshot.fetchedAt,
+    events: events,
+    table: snapshot.table || [],
+    error: ""
+  })
+}
+
 function parseBundle(bundle, nowMs) {
   var snapshot = emptySnapshot()
   if (!bundle || typeof bundle !== "object") {
@@ -901,6 +961,7 @@ function parseBundle(bundle, nowMs) {
   if (payloads.ekstraklasa) events = events.concat(parseListedEvents(payloads.ekstraklasa, club, nowMs, "ekstraklasa"))
   if (payloads.drugaliga) events = events.concat(parseListedEvents(payloads.drugaliga, club, nowMs, "drugaliga"))
   if (payloads.lechpoznan) events = events.concat(parseListedEvents(payloads.lechpoznan, club, nowMs, "lechpoznan"))
+  if (payloads.apifootball) events = events.concat(parseListedEvents(payloads.apifootball, club, nowMs, "apifootball"))
   snapshot.events = dedupeEvents(events)
   snapshot.table = parseClubTable(payloads.table, club)
   if (!snapshot.table.length && payloads.drugaliga && payloads.drugaliga.table)
@@ -1160,7 +1221,11 @@ function usableRound(raw, kind) {
   var s = String(raw || "").replace(/^\s+|\s+$/g, "")
   if (!s) return ""
   var n = parseInt(s, 10)
-  if (isNaN(n)) return s
+  if (isNaN(n)) {
+    var tail = s.match(/(\d+)\s*$/)
+    n = tail ? parseInt(tail[1], 10) : NaN
+  }
+  if (isNaN(n)) return ""
   if (kind === "europe") return ""
   if (kind === "cup") {
     if (n === 64 || n === 32 || n === 16 || n === 8 || n === 4 || n === 2) return String(n)
@@ -1269,6 +1334,7 @@ if (typeof module !== "undefined") {
     parseSportsDbEvents: parseSportsDbEvents,
     parseSportsDbTable: parseSportsDbTable,
     parseBundle: parseBundle,
+    applyLiveOverlay: applyLiveOverlay,
     parseCache: parseCache,
     pickNext: pickNext,
     pickNextCup: pickNextCup,

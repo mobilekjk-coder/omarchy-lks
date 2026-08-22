@@ -7,20 +7,33 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import sys
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
-from datetime import datetime, timezone
+from datetime import date, datetime, timedelta, timezone
+from pathlib import Path
 
-UA = "kjk.lks-omarchy/0.3 (personal Omarchy widget; +https://github.com/mobilekjk-coder/omarchy-lks)"
+UA = "kjk.lks-omarchy/0.4 (personal Omarchy widget; +https://github.com/mobilekjk-coder/omarchy-lks)"
 BROWSER_UA = (
     "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
     "(KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36"
 )
 
 SEASON = "2026-2027"
+STATE_DIR = Path.home() / ".local" / "state" / "omarchy" / "kjk.lks"
+APIFOOTBALL_BASE = "https://v3.football.api-sports.io"
+APIFOOTBALL_TTL = 3 * 60 * 60
+APIFOOTBALL_LIVE = {"1H", "2H", "HT", "ET", "BT", "P", "LIVE", "INT", "BREAK"}
+APIFOOTBALL_SEARCH = {
+    "lks": "LKS Lodz",
+    "lech": "Lech Poznan",
+    "tychy": "GKS Tychy",
+    "zawisza": "Zawisza Bydgoszcz",
+}
 
 CLUBS = {
     "lks": {
@@ -119,6 +132,116 @@ def get_json(url: str) -> object:
                 raise
             time.sleep(1.2 * (attempt + 1))
     raise last_error
+
+
+def load_apifootball_key() -> str:
+    env = (os.environ.get("APIFOOTBALL_KEY") or os.environ.get("API_FOOTBALL_KEY") or "").strip()
+    if env:
+        return env
+    path = STATE_DIR / "api-football.key"
+    try:
+        return path.read_text(encoding="utf-8").strip()
+    except OSError:
+        return ""
+
+
+def apifootball_get(path: str, params: dict) -> dict:
+    key = load_apifootball_key()
+    if not key:
+        raise RuntimeError("missing API-Football key")
+    url = APIFOOTBALL_BASE + "/" + path.lstrip("/")
+    if params:
+        url += "?" + urllib.parse.urlencode(params)
+    req = urllib.request.Request(url, headers={"x-apisports-key": key})
+    with urllib.request.urlopen(req, timeout=20) as resp:
+        raw = resp.read().decode("utf-8", "replace")
+    data = json.loads(raw)
+    errors = data.get("errors")
+    if errors:
+        raise RuntimeError(str(errors))
+    return data
+
+
+def apifootball_team_id(club_id: str) -> int | None:
+    STATE_DIR.mkdir(parents=True, exist_ok=True)
+    cache_path = STATE_DIR / "apifootball-teams.json"
+    cache: dict = {}
+    try:
+        cache = json.loads(cache_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        cache = {}
+    if club_id in cache and cache[club_id]:
+        return int(cache[club_id])
+    query = APIFOOTBALL_SEARCH.get(club_id)
+    if not query:
+        return None
+    data = apifootball_get("teams", {"search": query})
+    team_id = None
+    for row in data.get("response") or []:
+        team = row.get("team") or {}
+        country = str(team.get("country") or "")
+        if country.lower() == "poland" or not country:
+            team_id = team.get("id")
+            if country.lower() == "poland":
+                break
+    if not team_id:
+        return None
+    cache[club_id] = team_id
+    cache_path.write_text(json.dumps(cache, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    return int(team_id)
+
+
+def normalize_apifootball_fixtures(rows: list) -> list:
+    fixtures = []
+    for row in rows or []:
+        fx = row.get("fixture") or {}
+        teams = row.get("teams") or {}
+        goals = row.get("goals") or {}
+        league = row.get("league") or {}
+        status = ((fx.get("status") or {}).get("short") or "").upper()
+        fixtures.append({
+            "home": (teams.get("home") or {}).get("name") or "",
+            "away": (teams.get("away") or {}).get("name") or "",
+            "round": str(league.get("round") or ""),
+            "kickoff": fx.get("date") or "",
+            "status": status,
+            "homeScore": goals.get("home"),
+            "awayScore": goals.get("away"),
+            "competition": league.get("name") or "",
+            "elapsed": (fx.get("status") or {}).get("elapsed"),
+            "fixtureId": fx.get("id"),
+        })
+    return fixtures
+
+
+def fetch_apifootball(club_id: str, force: bool = False) -> dict:
+    cache_path = STATE_DIR / ("apifootball-" + club_id + ".json")
+    if not force and cache_path.is_file():
+        try:
+            cached = json.loads(cache_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            cached = None
+        age = time.time() - float((cached or {}).get("fetchedAt") or 0)
+        fixtures = (cached or {}).get("fixtures") or []
+        live = any(str(row.get("status") or "") in APIFOOTBALL_LIVE for row in fixtures)
+        if cached and age < APIFOOTBALL_TTL and not live:
+            return {"fixtures": fixtures, "cached": True}
+    team_id = apifootball_team_id(club_id)
+    if not team_id:
+        return {"fixtures": []}
+    today = date.today()
+    data = apifootball_get("fixtures", {
+        "team": team_id,
+        "from": (today - timedelta(days=14)).isoformat(),
+        "to": (today + timedelta(days=21)).isoformat(),
+    })
+    fixtures = normalize_apifootball_fixtures(data.get("response") or [])
+    STATE_DIR.mkdir(parents=True, exist_ok=True)
+    cache_path.write_text(json.dumps({
+        "fetchedAt": int(time.time()),
+        "fixtures": fixtures,
+    }, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    return {"fixtures": fixtures, "cached": False}
 
 
 def get_html(url: str) -> str:
@@ -378,6 +501,15 @@ def fetch_thesportsdb(club: dict, source: dict) -> dict:
 
 def fetch_source(club_id: str, section_id: str, source_id: str) -> dict:
     club = CLUBS[club_id]
+    if source_id == "apifootball":
+        return {
+            "ok": True,
+            "club": club_id,
+            "section": section_id,
+            "source": "apifootball",
+            "sourceLabel": "API-Football",
+            "payloads": {"apifootball": fetch_apifootball(club_id, force=bool(os.environ.get("RWE_LIVE")))},
+        }
     source = club["sources"][source_id]
     kind = source.get("kind") or source_id
     if kind == "1liga":
@@ -409,15 +541,51 @@ def fetch_source(club_id: str, section_id: str, source_id: str) -> dict:
     }
 
 
+def fetch_live_overlay(club_id: str, section_id: str) -> dict:
+    empty = {
+        "ok": True,
+        "club": club_id,
+        "section": section_id,
+        "source": "apifootball",
+        "sourceLabel": "API-Football",
+        "payloads": {},
+        "live": True,
+    }
+    if not load_apifootball_key():
+        return empty
+    try:
+        payloads = {"apifootball": fetch_apifootball(club_id, force=True)}
+    except (urllib.error.URLError, urllib.error.HTTPError, TimeoutError, json.JSONDecodeError, OSError, RuntimeError):
+        empty["ok"] = False
+        return empty
+    return {
+        "ok": True,
+        "club": club_id,
+        "section": section_id,
+        "source": "apifootball",
+        "sourceLabel": "API-Football",
+        "payloads": payloads,
+        "live": True,
+    }
+
+
 def fetch_merged(club_id: str, section_id: str) -> dict:
+    if os.environ.get("RWE_LIVE"):
+        return fetch_live_overlay(club_id, section_id)
+
     errors = []
     payloads = {}
     labels = []
 
-    for source_id in CLUBS[club_id]["sources"]:
+    source_ids = list(CLUBS[club_id]["sources"])
+    if load_apifootball_key():
+        source_ids.append("apifootball")
+    for source_id in source_ids:
+        if source_id == "apifootball" and not load_apifootball_key():
+            continue
         try:
             bundle = fetch_source(club_id, section_id, source_id)
-        except (urllib.error.URLError, urllib.error.HTTPError, TimeoutError, json.JSONDecodeError, OSError) as exc:
+        except (urllib.error.URLError, urllib.error.HTTPError, TimeoutError, json.JSONDecodeError, OSError, RuntimeError) as exc:
             errors.append(source_id + ": " + str(exc))
             continue
         if not usable(bundle):
@@ -473,6 +641,10 @@ def usable(bundle: dict) -> bool:
         tvp = payloads.get("tvp") or {}
         if tvp.get("items"):
             return True
+    if source in ("apifootball", "merged"):
+        api = payloads.get("apifootball") or {}
+        if api.get("fixtures"):
+            return True
     if source in ("drugaliga", "merged"):
         liga2 = payloads.get("drugaliga") or {}
         if liga2.get("fixtures") or liga2.get("table"):
@@ -485,7 +657,10 @@ def main() -> int:
     parser.add_argument("--club", default="lks")
     parser.add_argument("--section", default="football-men")
     parser.add_argument("--source", default="auto")
+    parser.add_argument("--live", action="store_true")
     args = parser.parse_args()
+    if args.live:
+        os.environ["RWE_LIVE"] = "1"
 
     club_id = (args.club or "lks").strip().lower()
     if club_id not in CLUBS:
@@ -499,9 +674,9 @@ def main() -> int:
     preference = (args.source or "auto").strip().lower()
 
     try:
-        if preference in ("", "auto", "merged"):
+        if args.live or preference in ("", "auto", "merged"):
             bundle = fetch_merged(club_id, args.section)
-        elif preference in sources:
+        elif preference == "apifootball" or preference in sources:
             bundle = fetch_source(club_id, args.section, preference)
             if not usable(bundle):
                 raise RuntimeError("empty payload")
