@@ -963,7 +963,11 @@ function parseBundle(bundle, nowMs) {
   if (payloads.lechpoznan) events = events.concat(parseListedEvents(payloads.lechpoznan, club, nowMs, "lechpoznan"))
   if (payloads.apifootball) events = events.concat(parseListedEvents(payloads.apifootball, club, nowMs, "apifootball"))
   snapshot.events = dedupeEvents(events)
-  snapshot.table = parseClubTable(payloads.table, club)
+  snapshot.table = []
+  if (payloads.liga && payloads.liga.table)
+    snapshot.table = parseClubTable(payloads.liga.table, club)
+  if (!snapshot.table.length)
+    snapshot.table = parseClubTable(payloads.table, club)
   if (!snapshot.table.length && payloads.drugaliga && payloads.drugaliga.table)
     snapshot.table = parseClubTable(payloads.drugaliga.table, club)
   if (!snapshot.table.length) snapshot.table = parseSportsDbTable(payloads.table, club)

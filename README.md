@@ -59,7 +59,7 @@ The panel, bar label, and notifications follow that language. `auto` uses Polish
 
 `auto` picks sources per club:
 
-- ŁKS — [lkslodz.pl](https://lkslodz.pl/) + [1liga.org](https://www.1liga.org/lks) + [TheSportsDB](https://www.thesportsdb.com/)
+- ŁKS — [lkslodz.pl](https://lkslodz.pl/) for fixtures, [1liga.org season table](https://www.1liga.org/sezon-2026/2027) for the league table, plus [TheSportsDB](https://www.thesportsdb.com/)
 - Lech — [lechpoznan.pl](https://www.lechpoznan.pl/terminarz/) + [ekstraklasa.org](https://ekstraklasa.org/kluby/lech-poznan/) + TheSportsDB
 - GKS Tychy and Zawisza — [drugaliga.org](https://www.drugaliga.org/) + TheSportsDB
 - ŁKS, Tychy, and Zawisza — [TVP Sport transmissions](https://sport.tvp.pl/transmisje) when a stream is listed
@@ -86,7 +86,8 @@ The key is cached for team IDs and fixtures for three hours. While the selected 
 
 Public JSON needs no key:
 
-- [lkslodz.pl](https://lkslodz.pl/) — official `/wp-json/lks/v1/matches` and `/league-table`
+- [lkslodz.pl](https://lkslodz.pl/) — official `/wp-json/lks/v1/matches`
+- [1liga.org](https://www.1liga.org/sezon-2026/2027) — I liga table for ŁKS
 - [ekstraklasa.org](https://ekstraklasa.org/) — Lech league calendar
 - [drugaliga.org](https://www.drugaliga.org/) — GKS Tychy and Zawisza calendar and table
 - [TheSportsDB](https://www.thesportsdb.com/) — documented free API (cups and Europe)

@@ -49,7 +49,12 @@ CLUBS = {
                     "table": "https://lkslodz.pl/wp-json/lks/v1/league-table",
                 },
             },
-            "1liga": {"label": "1liga.org", "kind": "1liga", "url": "https://www.1liga.org/lks"},
+            "1liga": {
+                "label": "1liga.org",
+                "kind": "1liga",
+                "url": "https://www.1liga.org/lks",
+                "table_url": "https://www.1liga.org/sezon-2026/2027",
+            },
             "thesportsdb": {
                 "label": "TheSportsDB",
                 "event_searches": ["GKS_Tychy_vs_LKS_Lodz", "LKS_Lodz_vs_GKS_Tychy"],
@@ -310,8 +315,59 @@ def parse_1liga_html(html: str) -> list:
     return fixtures
 
 
-def fetch_1liga(url: str) -> dict:
-    return {"fixtures": parse_1liga_html(get_html(url))}
+def parse_1liga_table(html: str) -> list:
+    table = []
+    chunk = html
+    start = html.find('class="whole-league-table"')
+    if start >= 0:
+        end = html.find("</table>", start)
+        chunk = html[start:end] if end >= 0 else html[start:]
+    for row in re.finditer(r"<tr[^>]*>([\s\S]*?)</tr>", chunk):
+        body = row.group(1)
+        name_m = re.search(r'class="whole-name[^"]*">([^<]+)', body)
+        if not name_m:
+            continue
+        cells = [_cell_text(c) for c in re.findall(r"<td[^>]*>([\s\S]*?)</td>", body)]
+        if len(cells) < 8:
+            continue
+
+        def cell_int(idx: int) -> int:
+            digits = re.sub(r"\D", "", cells[idx] if idx < len(cells) else "")
+            return int(digits) if digits else 0
+
+        gf = re.sub(r"\D", "", cells[8] if len(cells) > 8 else "")
+        ga = re.sub(r"\D", "", cells[9] if len(cells) > 9 else "")
+        if gf and ga:
+            goals = gf + ":" + ga
+        else:
+            goals = re.sub(r"\s+", "", cells[4])
+        table.append({
+            "position": cell_int(0),
+            "name": name_m.group(1).strip(),
+            "played": cell_int(2),
+            "points": cell_int(3),
+            "wins": cell_int(5),
+            "draws": cell_int(6),
+            "losses": cell_int(7),
+            "goals": goals,
+        })
+    return table
+
+
+def fetch_1liga(source: dict) -> dict:
+    fixtures = []
+    table = []
+    try:
+        fixtures = parse_1liga_html(get_html(source["url"]))
+    except (urllib.error.URLError, urllib.error.HTTPError, TimeoutError, OSError):
+        fixtures = []
+    table_url = source.get("table_url")
+    if table_url:
+        try:
+            table = parse_1liga_table(get_html(table_url))
+        except (urllib.error.URLError, urllib.error.HTTPError, TimeoutError, OSError):
+            table = []
+    return {"fixtures": fixtures, "table": table}
 
 
 def parse_ekstraklasa_html(html: str) -> list:
@@ -513,7 +569,7 @@ def fetch_source(club_id: str, section_id: str, source_id: str) -> dict:
     source = club["sources"][source_id]
     kind = source.get("kind") or source_id
     if kind == "1liga":
-        payloads = {"liga": fetch_1liga(source["url"])}
+        payloads = {"liga": fetch_1liga(source)}
     elif kind == "ekstraklasa":
         payloads = {"ekstraklasa": fetch_ekstraklasa(source["url"])}
     elif kind == "lechpoznan":
@@ -627,7 +683,7 @@ def usable(bundle: dict) -> bool:
             return True
     if source in ("1liga", "merged"):
         liga = payloads.get("liga") or {}
-        if liga.get("fixtures"):
+        if liga.get("fixtures") or liga.get("table"):
             return True
     if source in ("ekstraklasa", "merged"):
         eks = payloads.get("ekstraklasa") or {}
