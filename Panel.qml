@@ -69,8 +69,8 @@ Panel {
   property bool openedFromHotkey: false
 
   function close() {
-    setCenterHoverRevealSuppressed(false)
     root.controller.hide()
+    setCenterHoverRevealSuppressed(false)
   }
 
   function toggle() {
@@ -85,8 +85,18 @@ Panel {
   }
 
   function setCenterHoverRevealSuppressed(value) {
-    if (root.bar && typeof root.bar.setCenterHoverRevealSuppressed === "function")
-      root.bar.setCenterHoverRevealSuppressed(value)
+    if (!root.bar) return
+    // PluginBarApi exposes centerHoverRevealSuppressed as a readonly property.
+    // Qt's generated setter has the same name as the real method, so calling
+    // setCenterHoverRevealSuppressed() assigns the property and throws.
+    if (typeof root.bar._setCenterHoverRevealSuppressed === "function") {
+      root.bar._setCenterHoverRevealSuppressed(!!value)
+      return
+    }
+    try {
+      if (typeof root.bar.setCenterHoverRevealSuppressed === "function")
+        root.bar.setCenterHoverRevealSuppressed(!!value)
+    } catch (e) {}
   }
 
   function applyBundle(raw) {
